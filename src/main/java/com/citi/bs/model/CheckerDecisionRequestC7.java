@@ -3,10 +3,14 @@ package com.citi.bs.model;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 
+@AllArgsConstructor
+@RequiredArgsConstructor
 public class CheckerDecisionRequestC7 {
   private String decision; // "approved" or "rejected"
   private String remarks;
+
 
   public String getDecision() {
     return decision;

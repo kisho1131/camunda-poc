@@ -12,6 +12,7 @@ public class StartWorkflowRequestC7 {
   private String creator; // Will be used as assignee for maker task
   private String approver; // Will be used as assignee for checker task
 
+
   public String getRequestId() {
     return requestId;
   }

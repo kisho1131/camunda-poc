@@ -125,9 +125,8 @@ public class WorkflowC7Service {
 
     Map<String, Object> variables = new HashMap<>();
     variables.put("checkerDecision", request.getDecision().toLowerCase());
-    variables.put("checkerRemarks", Optional.ofNullable(request.getRemarks()).orElse(""));
-
-    taskService.complete(taskId, variables);
+    System.out.println(variables);
+    taskService.complete(taskId);
     logger.info("C7 Checker task {} completed with decision: {}.", taskId, request.getDecision());
   }
 }

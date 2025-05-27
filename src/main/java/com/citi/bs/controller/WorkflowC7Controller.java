@@ -6,7 +6,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -20,7 +22,7 @@ public class WorkflowC7Controller {
   @Autowired
   private WorkflowC7Service workflowC7Service;
 
-  @PostMapping("/start")
+  @PostMapping(value = "/start", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<WorkflowInstanceResponseC7> startWorkflow(@RequestBody StartWorkflowRequestC7 request) {
     try {
       WorkflowInstanceResponseC7 response = workflowC7Service.startWorkflow(request);
@@ -34,11 +36,12 @@ public class WorkflowC7Controller {
     }
   }
 
-  @GetMapping("/{processInstanceId}/tasks")
+  @GetMapping("/tasks")
   public ResponseEntity<List<TaskResponseC7>> getActiveTasksForProcessInstance(
-        @PathVariable String processInstanceId,
-        @RequestParam String taskDefinitionKey) {
+        @RequestParam("processInstanceId") String processInstanceId,
+        @RequestParam("taskDefinitionKey") String taskDefinitionKey) {
     try {
+      System.out.println("Getting the Process Definition for " + processInstanceId + " and " + taskDefinitionKey);
       List<TaskResponseC7> tasks = workflowC7Service.getActiveTasksForProcessInstance(processInstanceId, taskDefinitionKey);
       if (tasks.isEmpty()) {
         return ResponseEntity.noContent().build(); // Or ResponseEntity.ok(Collections.emptyList());
@@ -66,8 +69,8 @@ public class WorkflowC7Controller {
     }
   }
 
-  @PostMapping("/tasks/{taskId}/maker/complete")
-  public ResponseEntity<Void> completeMakerTask(@PathVariable String taskId, @RequestBody MakerCommentRequestC7 request) {
+  @PostMapping("/tasks/maker/complete")
+  public ResponseEntity<Void> completeMakerTask(@RequestParam("taskId") String taskId, @RequestBody MakerCommentRequestC7 request) {
     try {
       workflowC7Service.completeMakerTask(taskId, request);
       return ResponseEntity.ok().build();
@@ -80,11 +83,11 @@ public class WorkflowC7Controller {
     }
   }
 
-  @PostMapping("/tasks/{taskId}/checker/complete")
-  public ResponseEntity<Void> completeCheckerTask(@PathVariable String taskId, @RequestBody CheckerDecisionRequestC7 request) {
+  @PostMapping("/tasks/checker/complete")
+  public ResponseEntity<Boolean> completeCheckerTask(@RequestParam("taskId") String taskId, @RequestBody CheckerDecisionRequestC7 request) {
     try {
       workflowC7Service.completeCheckerTask(taskId, request);
-      return ResponseEntity.ok().build();
+      return ResponseEntity.ok().body(Boolean.TRUE);
     } catch (IllegalArgumentException e) {
       logger.warn("Validation error completing C7 checker task {}: {}", taskId, e.getMessage());
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
