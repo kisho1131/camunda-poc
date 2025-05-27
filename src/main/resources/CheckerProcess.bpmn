@@ -1,27 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.35.0" modeler:executionPlatform="Camunda Platform 7" modeler:executionPlatformVersion="7.21.0">
   <bpmn:process id="chatApprovalProcessC7" name="CheckerProcess" isExecutable="true">
+    <bpmn:extensionElements>
+      <camunda:executionListener class="com.citi.bs.listners.ApprovalStatusListener" event="end" />
+    </bpmn:extensionElements>
     <bpmn:startEvent id="StartEvent_ChatRequestReceived" name="Chat Request Received">
       <bpmn:outgoing>Flow_ToMakerTask</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:userTask id="makerTask" name="Maker Adds Commentary">
-      <bpmn:extensionElements>
-        <camunda:inputOutput>
-          <camunda:inputParameter name="Input_1gjpl3u" />
-        </camunda:inputOutput>
-      </bpmn:extensionElements>
       <bpmn:incoming>Flow_ToMakerTask</bpmn:incoming>
       <bpmn:outgoing>Flow_ToCheckerTask</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:sequenceFlow id="Flow_ToMakerTask" sourceRef="StartEvent_ChatRequestReceived" targetRef="makerTask" />
     <bpmn:userTask id="checkerTask" name="Checker Approves/Rejects">
-      <bpmn:extensionElements />
       <bpmn:incoming>Flow_ToCheckerTask</bpmn:incoming>
       <bpmn:outgoing>Flow_ToDecision</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:sequenceFlow id="Flow_ToCheckerTask" sourceRef="makerTask" targetRef="checkerTask" />
     <bpmn:exclusiveGateway id="Gateway_Decision" name="Decision Made?">
-      <bpmn:extensionElements />
       <bpmn:incoming>Flow_ToDecision</bpmn:incoming>
       <bpmn:outgoing>Flow_Approved</bpmn:outgoing>
       <bpmn:outgoing>Flow_Rejected</bpmn:outgoing>
@@ -31,13 +27,16 @@
       <bpmn:incoming>Flow_Approved</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_Approved" name="Approved" sourceRef="Gateway_Decision" targetRef="EndEvent_Approved">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"></bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${checkerDecision == 'approved'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:endEvent id="EndEvent_Rejected" name="Request Rejected">
+      <bpmn:extensionElements>
+        <camunda:executionListener class="com.citi.bs.listners.ApprovalStatusListener" event="end" />
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_Rejected</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_Rejected" name="Rejected" sourceRef="Gateway_Decision" targetRef="EndEvent_Rejected">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"></bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${checkerDecision == 'rejected'}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
