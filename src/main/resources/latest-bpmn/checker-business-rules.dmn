@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:camunda="http://camunda.org/schema/1.0/dmn" xmlns:biodi="http://bpmn.io/schema/dmn/biodi/2.0" id="checker-business-rules" name="Checker Business Rules" namespace="http://camunda.org/schema/1.0/dmn" exporter="Camunda Modeler" exporterVersion="5.35.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.23.0">
+  <decision id="checker-business-rule" name="Checker Business Rules" camunda:historyTimeToLive="1">
+    <decisionTable id="DecisionTable_0tp61qv" hitPolicy="FIRST">
+      <input id="Input_1" label="Privileges" biodi:width="288">
+        <inputExpression id="InputExpression_1" typeRef="string" expressionLanguage="feel">
+          <text>privileges</text>
+        </inputExpression>
+      </input>
+      <input id="InputClause_1hmrnjx" label="Commentary" biodi:width="276">
+        <inputExpression id="LiteralExpression_1ebr1tv" typeRef="string">
+          <text>commentary</text>
+        </inputExpression>
+      </input>
+      <output id="Output_1" label="Validation Result" name="validationResult" typeRef="string" />
+      <rule id="DecisionRule_167j7ow">
+        <inputEntry id="UnaryTests_0f910en">
+          <text>"CHECKER"</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_09r1e1j">
+          <text>not(null)</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0v8qx53">
+          <text>"valid"</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_02q1eto">
+        <inputEntry id="UnaryTests_0r8qdd1">
+          <text>"CHECKER"</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1j94aek">
+          <text>null or is blank()</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_18hb2v0">
+          <text>"invalid"</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1sgycjh">
+        <inputEntry id="UnaryTests_0mqrugo">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0f3e3s6">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1lpz7wp">
+          <text>"invalid"</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram>
+      <dmndi:DMNShape dmnElementRef="checker-business-rule">
+        <dc:Bounds height="80" width="180" x="160" y="100" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

@@ -1,0 +1,60 @@
+{
+  "components": [
+    {
+      "label": "Commentary",
+      "type": "textarea",
+      "layout": {
+        "row": "Row_0n18oda",
+        "columns": null
+      },
+      "id": "Field_1513hpp",
+      "key": "commentary",
+      "readonly": false,
+      "description": "commentary"
+    },
+    {
+      "label": "Request ID",
+      "type": "textfield",
+      "layout": {
+        "row": "Row_168375w",
+        "columns": null
+      },
+      "id": "Field_1ugeivh",
+      "key": "requestId",
+      "description": "Commentary",
+      "readonly": false
+    },
+    {
+      "label": "Privileges",
+      "type": "textfield",
+      "layout": {
+        "row": "Row_1ebsx97",
+        "columns": null
+      },
+      "id": "Field_1mpdb2s",
+      "key": "privileges",
+      "description": "Privileges",
+      "readonly": false
+    },
+    {
+      "label": "SOEID",
+      "type": "textfield",
+      "layout": {
+        "row": "Row_03gao0i",
+        "columns": null
+      },
+      "id": "Field_0d5ryfl",
+      "key": "soeid",
+      "description": "SOEID"
+    }
+  ],
+  "type": "default",
+  "id": "maker-request-form",
+  "exporter": {
+    "name": "Camunda Modeler",
+    "version": "5.35.0"
+  },
+  "executionPlatform": "Camunda Platform",
+  "executionPlatformVersion": "7.23.0",
+  "schemaVersion": 18
+}
