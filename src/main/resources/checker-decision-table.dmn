@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_0x1y2z3" name="DRD" namespace="http://example.com/DMN">
+  <decision id="CheckerAccessControl" name="Checker Access Control">
+    <informationRequirement id="InformationRequirement_0a1b2c3">
+      <requiredInput href="#InputData_0d2e3f4" />
+    </informationRequirement>
+    <decisionTable id="DecisionTable_0g3h4i5">
+      <input id="Input_1" label="supportGroup">
+        <inputExpression id="InputExpression_1" typeRef="string">
+          <text>supportGroup</text>
+        </inputExpression>
+      </input>
+      <output id="Output_1" label="accessResult" typeRef="string" />
+      <rule id="DecisionRule_0j4k5l6">
+        <inputEntry id="UnaryTests_0m5n6o7">
+          <text>"CheckerSupportGroup"</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0p6q7r8">
+          <text>"valid"</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0s7t8u9">
+        <inputEntry id="UnaryTests_0v8w9x0">
+          <text>not("CheckerSupportGroup")</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0y9z0a1">
+          <text>"invalid"</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <inputData id="InputData_0d2e3f4" name="supportGroup" />
+  <dmndi:DMNDiagram id="DMNDiagram_0b2c3d4">
+    <dmndi:DMNShape id="DMNShape_1" dmnElementRef="CheckerAccessControl">
+      <dc:Bounds height="80" width="180" x="160" y="100" />
+    </dmndi:DMNShape>
+    <dmndi:DMNShape id="DMNShape_0e3f4g5" dmnElementRef="InputData_0d2e3f4">
+      <dc:Bounds height="45" width="125" x="188" y="248" />
+    </dmndi:DMNShape>
+    <dmndi:DMNEdge id="DMNEdge_0h4i5j6" dmnElementRef="InformationRequirement_0a1b2c3">
+      <dmndi:waypoints>
+        <dc:Point x="250" y="248" />
+        <dc:Point x="250" y="180" />
+      </dmndi:waypoints>
+    </dmndi:DMNEdge>
+  </dmndi:DMNDiagram>
+</definitions>

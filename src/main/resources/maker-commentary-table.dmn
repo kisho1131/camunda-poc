@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_036m3z1" name="DRD" namespace="http://example.com/DMN" exporter="Camunda Modeler" exporterVersion="5.35.0">
+  <decision id="MakerCommentaryValidation" name="Maker Commentary Validation">
+    <informationRequirement id="InformationRequirement_1s6y18u">
+      <requiredInput href="#InputData_05g76s0" />
+    </informationRequirement>
+    <decisionTable id="DecisionTable_1416n0i" hitPolicy="FIRST">
+      <input id="Input_1" label="commentary">
+        <inputExpression id="InputExpression_1" typeRef="string">
+          <text>commentary</text>
+        </inputExpression>
+      </input>
+      <output id="Output_1" label="validationResult" typeRef="string" />
+      <rule id="DecisionRule_0u8v17j">
+        <inputEntry id="UnaryTests_0947g8i">
+          <text>is not null and not("")</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1x02b2y">
+          <text>"valid"</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0a8q4z8">
+        <inputEntry id="UnaryTests_0r6q4t3">
+          <text>is null or ""</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1j2g7n5">
+          <text>"invalid"</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <inputData id="InputData_05g76s0" name="commentary" />
+</definitions>
