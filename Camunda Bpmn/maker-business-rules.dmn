@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:modeler="http://camunda.org/schema/modeler/1.0" xmlns:camunda="http://camunda.org/schema/1.0/dmn" xmlns:biodi="http://bpmn.io/schema/dmn/biodi/2.0" id="maker-bussiness-rules" name="Maker Bussiness Rules" namespace="http://camunda.org/schema/1.0/dmn" exporter="Camunda Modeler" exporterVersion="5.35.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.23.0">
+  <decision id="maker-bussiness-rule" name="Maker Business Rules" camunda:historyTimeToLive="1">
+    <decisionTable id="DecisionTable_0k596cu" hitPolicy="FIRST">
+      <input id="Input_1" label="Maker Privileges" biodi:width="305">
+        <inputExpression id="InputExpression_1" typeRef="string" expressionLanguage="feel">
+          <text>makerPrivileges</text>
+        </inputExpression>
+      </input>
+      <input id="InputClause_0zgov8v" label="Commentary" biodi:width="340">
+        <inputExpression id="LiteralExpression_173ax8v" typeRef="string">
+          <text>commentary</text>
+        </inputExpression>
+      </input>
+      <output id="Output_1" label="Validation Result" name="validationResult" typeRef="string" />
+      <rule id="DecisionRule_1ojsqdz">
+        <inputEntry id="UnaryTests_0acr51p">
+          <text>"MAKER"</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0jtfi7z">
+          <text>not(null)</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0govgws">
+          <text>"valid"</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0sy4mh6">
+        <inputEntry id="UnaryTests_0vjkfzj">
+          <text>"MAKER"</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_06armos">
+          <text>null or is blank()</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1eqyzcn">
+          <text>"invalid"</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_14t13jw">
+        <inputEntry id="UnaryTests_1tnj295">
+          <text></text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1brt4ti">
+          <text></text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0oxkezj">
+          <text>"invalid"</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram>
+      <dmndi:DMNShape dmnElementRef="maker-bussiness-rule">
+        <dc:Bounds height="80" width="180" x="160" y="100" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

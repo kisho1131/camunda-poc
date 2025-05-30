@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.35.0" modeler:executionPlatform="Camunda Platform 7" modeler:executionPlatformVersion="7.21.0">
+  <bpmn:process id="commentary-approval-workflow" name="Commentary Approval Workflow" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:documentation>Maker Commentary Rules</bpmn:documentation>
+    <bpmn:extensionElements />
+    <bpmn:startEvent id="StartEvent_ChatRequestReceived" name="Chat Request Received">
+      <bpmn:outgoing>Flow_ToMakerTask</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_ToMakerTask" sourceRef="StartEvent_ChatRequestReceived" targetRef="makerTask" />
+    <bpmn:userTask id="checkerTask" name="Checker Approves/Rejects">
+      <bpmn:incoming>maker-gateway-valid</bpmn:incoming>
+      <bpmn:outgoing>Flow_0qz86rj</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_ToCheckerTask" sourceRef="makerTask" targetRef="maker-commentary-rule" />
+    <bpmn:endEvent id="EndEvent_Approved" name="Request Approved">
+      <bpmn:extensionElements>
+        <camunda:executionListener class="com.citi.bs.listners.ApprovalStatusListener" event="start" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>checker-gateway-valid</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_0qz86rj" sourceRef="checkerTask" targetRef="checker-commentary-rule" />
+    <bpmn:userTask id="makerTask" name="Maker Adds Commentary" camunda:formRef="maker-request-form" camunda:formRefBinding="latest">
+      <bpmn:incoming>Flow_ToMakerTask</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToCheckerTask</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_123gb0p" sourceRef="maker-commentary-rule" targetRef="maker-gateway-invalid" />
+    <bpmn:businessRuleTask id="maker-commentary-rule" name="Maker Commentary Rules" camunda:resultVariable="validationResult" camunda:decisionRef="maker-bussiness-rule" camunda:mapDecisionResult="singleEntry">
+      <bpmn:incoming>Flow_ToCheckerTask</bpmn:incoming>
+      <bpmn:outgoing>Flow_123gb0p</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:exclusiveGateway id="maker-gateway-invalid">
+      <bpmn:incoming>Flow_123gb0p</bpmn:incoming>
+      <bpmn:outgoing>maker-gateway-valid</bpmn:outgoing>
+      <bpmn:outgoing>Flow_08qz8tm</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="maker-gateway-valid" name="valid" sourceRef="maker-gateway-invalid" targetRef="checkerTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${validationResult == "valid"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:endEvent id="Event_1a92rf3" name="End">
+      <bpmn:incoming>Flow_08qz8tm</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_08qz8tm" name="invalid" sourceRef="maker-gateway-invalid" targetRef="Event_1a92rf3">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${validationResult == "invalid"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_1n93tuk" sourceRef="checker-commentary-rule" targetRef="Gateway_1c5v48c" />
+    <bpmn:businessRuleTask id="checker-commentary-rule" name="Checker Commentary Rules" camunda:resultVariable="validationResult" camunda:decisionRef="checker-business-rule" camunda:mapDecisionResult="singleEntry">
+      <bpmn:incoming>Flow_0qz86rj</bpmn:incoming>
+      <bpmn:outgoing>Flow_1n93tuk</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:exclusiveGateway id="Gateway_1c5v48c">
+      <bpmn:incoming>Flow_1n93tuk</bpmn:incoming>
+      <bpmn:outgoing>checker-gateway-valid</bpmn:outgoing>
+      <bpmn:outgoing>checker-gateway-invalid</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="checker-gateway-valid" name="valid" sourceRef="Gateway_1c5v48c" targetRef="EndEvent_Approved">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${validationResult == "valid"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:endEvent id="Event_18ssp1z" name="End">
+      <bpmn:incoming>checker-gateway-invalid</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="checker-gateway-invalid" name="invalid" sourceRef="Gateway_1c5v48c" targetRef="Event_18ssp1z">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${validationResult =="invalid"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="commentary-approval-workflow">
+      <bpmndi:BPMNShape id="StartEvent_ChatRequestReceived_di" bpmnElement="StartEvent_ChatRequestReceived">
+        <dc:Bounds x="212" y="159" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="197" y="202" width="68" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1k57gzt_di" bpmnElement="checkerTask">
+        <dc:Bounds x="730" y="130" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_0n1jm8v_di" bpmnElement="EndEvent_Approved">
+        <dc:Bounds x="1192" y="142" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1187" y="185" width="48" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0p3dpo4_di" bpmnElement="makerTask">
+        <dc:Bounds x="290" y="137" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1v78ykm_di" bpmnElement="maker-commentary-rule">
+        <dc:Bounds x="430" y="137" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1a92rf3_di" bpmnElement="Event_1a92rf3">
+        <dc:Bounds x="582" y="272" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="590" y="315" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0rhsu57_di" bpmnElement="checker-commentary-rule">
+        <dc:Bounds x="910" y="130" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_1c5v48c_di" bpmnElement="Gateway_1c5v48c" isMarkerVisible="true">
+        <dc:Bounds x="1055" y="135" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_18ssp1z_di" bpmnElement="Event_18ssp1z">
+        <dc:Bounds x="1062" y="272" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1070" y="315" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_1tcaa4h_di" bpmnElement="maker-gateway-invalid" isMarkerVisible="true">
+        <dc:Bounds x="605" y="105" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="604" y="223" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_0k1u0s4_di" bpmnElement="Flow_ToMakerTask">
+        <di:waypoint x="248" y="177" />
+        <di:waypoint x="290" y="177" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0e8x2a7_di" bpmnElement="Flow_ToCheckerTask">
+        <di:waypoint x="390" y="177" />
+        <di:waypoint x="430" y="177" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0qz86rj_di" bpmnElement="Flow_0qz86rj">
+        <di:waypoint x="830" y="170" />
+        <di:waypoint x="910" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_123gb0p_di" bpmnElement="Flow_123gb0p">
+        <di:waypoint x="530" y="177" />
+        <di:waypoint x="553" y="177" />
+        <di:waypoint x="553" y="130" />
+        <di:waypoint x="605" y="130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_146cghn_di" bpmnElement="maker-gateway-valid">
+        <di:waypoint x="655" y="130" />
+        <di:waypoint x="678" y="130" />
+        <di:waypoint x="678" y="170" />
+        <di:waypoint x="730" y="170" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="655" y="112" width="23" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08qz8tm_di" bpmnElement="Flow_08qz8tm">
+        <di:waypoint x="630" y="155" />
+        <di:waypoint x="630" y="209" />
+        <di:waypoint x="600" y="209" />
+        <di:waypoint x="600" y="272" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="634" y="209" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1n93tuk_di" bpmnElement="Flow_1n93tuk">
+        <di:waypoint x="1010" y="170" />
+        <di:waypoint x="1033" y="170" />
+        <di:waypoint x="1033" y="160" />
+        <di:waypoint x="1055" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0hax9gm_di" bpmnElement="checker-gateway-valid">
+        <di:waypoint x="1105" y="160" />
+        <di:waypoint x="1192" y="160" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1127" y="143" width="23" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0f4auzf_di" bpmnElement="checker-gateway-invalid">
+        <di:waypoint x="1080" y="185" />
+        <di:waypoint x="1080" y="272" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1084" y="243" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

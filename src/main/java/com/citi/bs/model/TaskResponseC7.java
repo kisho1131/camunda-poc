@@ -6,7 +6,6 @@ import java.util.Date;
 
 @Getter
 @Setter
-@AllArgsConstructor
 @RequiredArgsConstructor
 public class TaskResponseC7 {
   private String id;
@@ -15,4 +14,13 @@ public class TaskResponseC7 {
   private Date createTime;
   private String processInstanceId;
   private String taskDefinitionKey;
+
+  public TaskResponseC7(String id, String name, String assignee, Date createTime, String processInstanceId, String taskDefinitionKey) {
+    this.id = id;
+    this.name = name;
+    this.assignee = assignee;
+    this.createTime = createTime;
+    this.processInstanceId = processInstanceId;
+    this.taskDefinitionKey = taskDefinitionKey;
+  }
 }
