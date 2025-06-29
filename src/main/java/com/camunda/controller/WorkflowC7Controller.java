@@ -1,7 +1,7 @@
-package com.citi.bs.controller;
+package com.camunda.controller;
 
-import com.citi.bs.model.*;
-import com.citi.bs.service.WorkflowC7Service;
+import com.camunda.model.*;
+import com.camunda.service.WorkflowC7Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

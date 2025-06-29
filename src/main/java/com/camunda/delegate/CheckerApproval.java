@@ -1,4 +1,4 @@
-package com.citi.bs.delegate;
+package com.camunda.delegate;
 
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.camunda.bpm.engine.delegate.JavaDelegate;

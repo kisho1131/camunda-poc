@@ -1,4 +1,4 @@
-package com.citi.bs.model;
+package com.camunda.model;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;

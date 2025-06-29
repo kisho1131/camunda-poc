@@ -1,4 +1,4 @@
-package com.citi.bs.dmn.rules;
+package com.camunda.dmn.rules;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;

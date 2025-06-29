@@ -1,4 +1,4 @@
-package com.citi.bs;
+package com.camunda;
 
 import org.camunda.bpm.spring.boot.starter.annotation.EnableProcessApplication;
 import org.springframework.boot.SpringApplication;
