@@ -1,0 +1,174 @@
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.atomic.DoubleAdder;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+public class ProfileDetailsService {
+    public ProfileDetailsDTO getProfileDetailsById(RequestModel requestModel) {
+        Map<String, Object> queryParameters = prepareQueryParameters(requestModel);
+        logQueryExecution(requestModel, queryParameters);
+
+        List<ProfileDetails> detailsList = fetchProfileDetails(queryParameters);
+
+        return detailsList.stream()
+            .collect(Collectors.groupingBy(
+                ProfileDetails::getPfid,
+                Collectors.collectingAndThen(
+                    customCollector(detailsList),
+                    result -> buildProfileDetailsDTO(requestModel, result)
+                )
+            ))
+            .entrySet().stream()
+            .filter(entry -> entry.getKey().equals(requestModel.getPfid()))
+            .findFirst()
+            .orElseThrow(() -> new DataNotFoundException(
+                "Profile details not found for pfId: " + requestModel.getPfid() + " and tmid: " + requestModel.getTmid()
+            ));
+    }
+
+    private Map<String, Object> prepareQueryParameters(RequestModel requestModel) {
+        Map<String, Object> queryParameters = new HashMap<>();
+        queryParameters.put("pfId", requestModel.getPfid());
+        queryParameters.put("tmid", requestModel.getTmid());
+        queryParameters.put("mshLevel4Cd", requestModel.getMshLevel4Cd());
+        queryParameters.put("mshLevel2Cd", requestModel.getMshLevel2Cd());
+        queryParameters.put(WorkflowConstants.MSH_LEVEL2_CD, requestModel.getMshLevel2Cd());
+        queryParameters.put(WorkflowConstants.MSH_LEVEL4_CD, requestModel.getMshLevel4Cd());
+        queryParameters.put(WorkflowConstants.FOR_MARKET, WorkflowConstants.FOR_MARKET);
+        return queryParameters;
+    }
+
+    private void logQueryExecution(RequestModel requestModel, Map<String, Object> queryParameters) {
+        log.info("Fetching profile details for pfId: {}, tmid: {}, mshLevel4Cd: {}, mshLevel2Cd: {}",
+            requestModel.getPfid(), requestModel.getTmid(), requestModel.getMshLevel4Cd(), requestModel.getMshLevel2Cd());
+    }
+
+    private List<ProfileDetails> fetchProfileDetails(Map<String, Object> queryParameters) {
+        String sqlQuery = Objects.requireNonNullElse(
+            System.getenv("select.for.profile.details"),
+            "SQL query for profile details is not configured"
+        );
+        return genericDatabaseQueryExecutor.fetchDataFromDatabase(sqlQuery, queryParameters, ProfileDetails.class);
+    }
+
+    private Collector<ProfileDetails, ?, ProfileDataAggregator> customCollector(List<ProfileDetails> detailsList) {
+        return Collector.of(
+            ProfileDataAggregator::new,
+            (aggregator, profile) -> {
+                FieldCollectorConfig.stream()
+                    .filter(FieldCollectorConfig::isStringField)
+                    .forEach(config -> aggregator.addToCollection(config.name(), config.apply(profile)));
+                FieldCollectorConfig.stream()
+                    .filter(config -> !config.isStringField())
+                    .forEach(config -> aggregator.addToSum(config.name(), ((Number) config.apply(profile)).doubleValue()));
+            },
+            ProfileDataAggregator::combine,
+            aggregator -> aggregator
+        );
+    }
+
+    private ProfileDetailsDTO buildProfileDetailsDTO(RequestModel requestModel, ProfileDataAggregator aggregator) {
+        return new ProfileDetailsDTO(
+            requestModel.getPfid(),
+            requestModel.getTmid(),
+            requestModel.getMshLevel4Cd(),
+            requestModel.getMshLevel2Cd(),
+            new AccountingDetails(
+                aggregator.getCollection(FieldCollectorConfig.FDL_DESCRIPTION.name()),
+                aggregator.getCollection(FieldCollectorConfig.GOC_CODE.name())
+            ),
+            new AccountMetrics(
+                (float) aggregator.getSum(FieldCollectorConfig.VARIANCE.name())
+            )
+        );
+    }
+}
+
+class ProfileDataAggregator {
+    private final Map<String, Set<String>> stringCollections = new HashMap<>();
+    private final Map<String, DoubleAdder> numericSums = new HashMap<>();
+
+    public void addToCollection(String fieldName, String value) {
+        stringCollections.computeIfAbsent(fieldName, k -> new TreeSet<>()).add(value);
+    }
+
+    public void addToSum(String fieldName, double value) {
+        numericSums.computeIfAbsent(fieldName, k -> new DoubleAdder()).add(value);
+    }
+
+    public List<String> getCollection(String fieldName) {
+        return new ArrayList<>(stringCollections.getOrDefault(fieldName, new TreeSet<>()));
+    }
+
+    public double getSum(String fieldName) {
+        return numericSums.getOrDefault(fieldName, new DoubleAdder()).doubleValue();
+    }
+
+    public ProfileDataAggregator combine(ProfileDataAggregator other) {
+        ProfileDataAggregator combined = new ProfileDataAggregator();
+        combined.stringCollections.putAll(this.stringCollections);
+        combined.numericSums.putAll(this.numericSums);
+        other.stringCollections.forEach((key, value) ->
+            combined.stringCollections.computeIfAbsent(key, k -> new TreeSet<>()).addAll(value));
+        other.numericSums.forEach((key, value) ->
+            combined.numericSums.computeIfAbsent(key, k -> new DoubleAdder()).add(value.doubleValue()));
+        return combined;
+    }
+}
+
+enum FieldCollectorConfig {
+    FDL_DESCRIPTION(ProfileDetails::getFdlDescription, true),
+    GOC_CODE(ProfileDetails::getGocCode, true),
+    ADDITIONAL_FIELD(ProfileDetails::getAdditionalField, true),
+    VARIANCE(ProfileDetails::getVariance, false);
+
+    private final Function<ProfileDetails, ?> getter;
+    private final boolean isStringField;
+
+    FieldCollectorConfig(Function<ProfileDetails, ?> getter, boolean isStringField) {
+        this.getter = getter;
+        this.isStringField = isStringField;
+    }
+
+    public String name() { return name(); }
+    public <T> T apply(ProfileDetails profile) { return (T) getter.apply(profile); }
+    public boolean isStringField() { return isStringField; }
+    public static Stream<FieldCollectorConfig> stream() { return Stream.of(values()); }
+}
+
+record AccountingDetails(List<String> fdlDescription, List<String> gocCode) {}
+
+record AccountMetrics(Float variance) {}
+
+public class ProfileDetailsDTO {
+    private final Integer pfId;
+    private final String tmid;
+    private final String mshLevel4Cd;
+    private final String mshLevel2Cd;
+    private final AccountingDetails accountingDetails;
+    private final AccountMetrics accountMetrics;
+
+    public ProfileDetailsDTO(Integer pfId, String tmid, String mshLevel4Cd, String mshLevel2Cd,
+                           AccountingDetails accountingDetails, AccountMetrics accountMetrics) {
+        this.pfId = pfId;
+        this.tmid = tmid;
+        this.mshLevel4Cd = mshLevel4Cd;
+        this.mshLevel2Cd = mshLevel2Cd;
+        this.accountingDetails = accountingDetails;
+        this.accountMetrics = accountMetrics;
+    }
+
+    // Getters
+    public Integer getPfid() { return pfId; }
+    public String getTmid() { return tmid; }
+    public String getMshLevel4Cd() { return mshLevel4Cd; }
+    public String getMshLevel2Cd() { return mshLevel2Cd; }
+    public AccountingDetails getAccountingDetails() { return accountingDetails; }
+    public AccountMetrics getAccountMetrics() { return accountMetrics; }
+}
