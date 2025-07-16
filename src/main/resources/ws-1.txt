@@ -1,0 +1,362 @@
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.IdClass;
+import jakarta.persistence.Table;
+import java.io.Serializable;
+import java.util.Objects;
+
+@Entity
+@Table(name = "PF_EXP")
+public class PFExp {
+    @Id
+    private Integer pfId;
+    private String tmid;
+    private String pmfLevel1Cd;
+
+    // Getters and setters
+    public Integer getPfId() { return pfId; }
+    public void setPfId(Integer pfId) { this.pfId = pfId; }
+    public String getTmid() { return tmid; }
+    public void setTmid(String tmid) { this.tmid = tmid; }
+    public String getPmfLevel1Cd() { return pmfLevel1Cd; }
+    public void setPmfLevel1Cd(String pmfLevel1Cd) { this.pmfLevel1Cd = pmfLevel1Cd; }
+}
+
+@Entity
+@Table(name = "PF_COMM_DTL")
+@IdClass(PFCommDtlId.class)
+public class PFCommDtl {
+    @Id
+    private Integer pfId;
+    @Id
+    private String pmfLevel1Cd;
+    private String commentary;
+    private String status; // e.g., "PENDING", "REJECTED", "APPROVED"
+    private String checkerRemarks; // Remarks from supervisor
+
+    // Getters and setters
+    public Integer getPfId() { return pfId; }
+    public void setPfId(Integer pfId) { this.pfId = pfId; }
+    public String getPmfLevel1Cd() { return pmfLevel1Cd; }
+    public void setPmfLevel1Cd(String pmfLevel1Cd) { this.pmfLevel1Cd = pmfLevel1Cd; }
+    public String getCommentary() { return commentary; }
+    public void setCommentary(String commentary) { this.commentary = commentary; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public String getCheckerRemarks() { return checkerRemarks; }
+    public void setCheckerRemarks(String checkerRemarks) { this.checkerRemarks = checkerRemarks; }
+}
+
+class PFCommDtlId implements Serializable {
+    private Integer pfId;
+    private String pmfLevel1Cd;
+
+    // Default constructor (required for JPA)
+    public PFCommDtlId() {}
+
+    public PFCommDtlId(Integer pfId, String pmfLevel1Cd) {
+        this.pfId = pfId;
+        this.pmfLevel1Cd = pmfLevel1Cd;
+    }
+
+    // Equals and hashCode (required for composite keys)
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        PFCommDtlId that = (PFCommDtlId) o;
+        return Objects.equals(pfId, that.pfId) && Objects.equals(pmfLevel1Cd, that.pmfLevel1Cd);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(pfId, pmfLevel1Cd);
+    }
+}
+
+@Entity
+@Table(name = "WF_STATUS")
+public class WFStatus {
+    @Id
+    private Integer pfId;
+    private String tmid;
+    private String wfType;
+    private String status;
+
+    // Getters and setters
+    public Integer getPfId() { return pfId; }
+    public void setPfId(Integer pfId) { this.pfId = pfId; }
+    public String getTmid() { return tmid; }
+    public void setTmid(String tmid) { this.tmid = tmid; }
+    public String getWfType() { return wfType; }
+    public void setWfType(String wfType) { this.wfType = wfType; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+}
+----------------
+import java.util.List;
+
+public interface WorkflowContext {
+    Object getIdentifier(); // e.g., pfId or other workflow-specific ID
+    String getWorkflowType();
+    List<String> getRequiredItems(); // e.g., pmfLevel1Cd list
+    List<String> getCompletedItems(); // e.g., pmfLevel1Cd with commentaries
+    String getUserRole();
+}
+
+public interface WorkflowRules {
+    boolean isCommentaryComplete(WorkflowContext context);
+    boolean canApprove(WorkflowContext context);
+    String determineNextStatus(WorkflowContext context);
+    boolean isAllCommentariesAdded(WorkflowContext context);
+    boolean isAnyCommentaryRejected(WorkflowContext context); // Check for any rejected commentaries
+}
+
+public interface WorkflowValidator {
+    void validateCommentary(WorkflowContext context, String item, String commentary, String status, String checkerRemarks);
+    void validateProcess(WorkflowContext context, String pmfLevel1Cd, String status, String checkerRemarks);
+}
+
+public interface IWorkflowManager {
+    void addCommentary(Integer pfId, String tmid, String pmfLevel1Cd, String commentary, String status, String checkerRemarks, String userRole);
+    void processCommentary(Integer pfId, String tmid, String pmfLevel1Cd, String status, String checkerRemarks, String userRole);
+}
+
+------------
+
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+
+public class DailyPfBsWorkflowContext implements WorkflowContext {
+    private final Integer pfId;
+    private final String tmid;
+    private final String wfType = "DAILY_PF_BS";
+    private final List<String> requiredPmfLevel1Cds;
+    private final List<PFCommDtl> commentaries;
+    private final String userRole;
+
+    public DailyPfBsWorkflowContext(Integer pfId, String tmid, List<String> requiredPmfLevel1Cds,
+                                   List<PFCommDtl> commentaries, String userRole) {
+        this.pfId = pfId;
+        this.tmid = tmid;
+        this.requiredPmfLevel1Cds = requiredPmfLevel1Cds;
+        this.commentaries = commentaries;
+        this.userRole = userRole;
+    }
+
+    @Override
+    public Object getIdentifier() { return pfId; }
+    @Override
+    public String getWorkflowType() { return wfType; }
+    @Override
+    public List<String> getRequiredItems() { return requiredPmfLevel1Cds; }
+    @Override
+    public List<String> getCompletedItems() {
+        return commentaries.stream()
+            .filter(c -> c.getPfId().equals(pfId) && "PENDING".equals(c.getStatus()))
+            .map(PFCommDtl::getPmfLevel1Cd)
+            .distinct()
+            .collect(Collectors.toList());
+    }
+    @Override
+    public String getUserRole() { return userRole; }
+}
+
+public class DailyPfBsRules implements WorkflowRules {
+    @Override
+    public boolean isCommentaryComplete(WorkflowContext context) {
+        return context.getCompletedItems().size() == context.getRequiredItems().size();
+    }
+
+    @Override
+    public boolean canApprove(WorkflowContext context) {
+        return context.getCompletedItems().stream()
+            .anyMatch(item -> context.getUserRole().contains("SUPERVISOR"));
+    }
+
+    @Override
+    public String determineNextStatus(WorkflowContext context) {
+        if (context.getCompletedItems().isEmpty()) return "MakerReview InProgress";
+        if (isAnyCommentaryRejected(context)) return "REJECTED";
+        return isAllCommentariesAdded(context) ? "Supervisor Approval InProgress" : "MakerReview InProgress";
+    }
+
+    @Override
+    public boolean isAllCommentariesAdded(WorkflowContext context) {
+        return context.getCompletedItems().size() == context.getRequiredItems().size();
+    }
+
+    @Override
+    public boolean isAnyCommentaryRejected(WorkflowContext context) {
+        return context.getCompletedItems().stream()
+            .anyMatch(item -> {
+                Optional<PFCommDtl> rejected = context.getCompletedItems().stream()
+                    .filter(c -> "REJECTED".equals(c.getStatus()))
+                    .findFirst();
+                return rejected.isPresent();
+            }); // Placeholder: Adjust to fetch all PFCommDtl records
+    }
+}
+
+public class DailyPfBsValidator implements WorkflowValidator {
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    private static final int START_HOUR = 9; // 9:00 AM IST
+    private static final int END_HOUR = 18;  // 6:00 PM IST
+
+    @Override
+    public void validateCommentary(WorkflowContext context, String pmfLevel1Cd, String commentary, String status, String checkerRemarks) {
+        Integer pfId = (Integer) context.getIdentifier();
+        String userRole = context.getUserRole();
+        if (pfId == null || pmfLevel1Cd == null || commentary == null || status == null) {
+            throw new IllegalArgumentException("PfId, pmfLevel1Cd, commentary, and status must not be null");
+        }
+        if (!userRole.contains("CONTROLLER") && !status.equals("PENDING")) {
+            throw new SecurityException("Only Controller can set status to PENDING");
+        }
+        if (!isWithinBusinessHours()) {
+            throw new IllegalStateException("Commentary can only be added between 9:00 AM and 6:00 PM IST");
+        }
+    }
+
+    @Override
+    public void validateProcess(WorkflowContext context, String pmfLevel1Cd, String status, String checkerRemarks) {
+        Integer pfId = (Integer) context.getIdentifier();
+        String userRole = context.getUserRole();
+        if (pfId == null || pmfLevel1Cd == null || status == null || checkerRemarks == null || checkerRemarks.trim().isEmpty()) {
+            throw new IllegalArgumentException("PfId, pmfLevel1Cd, status, and checkerRemarks must not be null or empty");
+        }
+        if (!userRole.contains("SUPERVISOR")) {
+            throw new SecurityException("Only Supervisor can process commentary");
+        }
+        if (!status.equals("APPROVED") && !status.equals("REJECTED")) {
+            throw new IllegalArgumentException("Status must be APPROVED or REJECTED");
+        }
+        if (context.getCompletedItems().stream().anyMatch(c -> c.getPfId().equals(pfId) && userRole.contains("CONTROLLER"))) {
+            throw new SecurityException("User with Controller role cannot process their own commentary");
+        }
+        if (!isWithinBusinessHours()) {
+            throw new IllegalStateException("Processing can only be performed between 9:00 AM and 6:00 PM IST");
+        }
+    }
+
+    private boolean isWithinBusinessHours() {
+        LocalDateTime now = LocalDateTime.now(IST); // 02:24 AM IST, July 17, 2025
+        int hour = now.getHour();
+        return hour >= START_HOUR && hour < END_HOUR; // Currently false (outside 9 AM - 6 PM)
+    }
+}
+
+@Service
+public class ManualWorkflowManager implements IWorkflowManager {
+    private final WorkflowRules rules;
+    private final WorkflowValidator validator;
+    private final PFExpRepository pfExpRepository;
+    private final PFCommDtlRepository pfCommDtlRepository;
+    private final WFStatusRepository wfStatusRepository;
+
+    @Autowired
+    public ManualWorkflowManager(WorkflowRules rules, WorkflowValidator validator,
+                                 PFExpRepository pfExpRepository, PFCommDtlRepository pfCommDtlRepository,
+                                 WFStatusRepository wfStatusRepository) {
+        this.rules = rules;
+        this.validator = validator;
+        this.pfExpRepository = pfExpRepository;
+        this.pfCommDtlRepository = pfCommDtlRepository;
+        this.wfStatusRepository = wfStatusRepository;
+    }
+
+    @Override
+    public void addCommentary(Integer pfId, String tmid, String pmfLevel1Cd, String commentary, String status, String checkerRemarks, String userRole) {
+        List<String> requiredPmfLevel1Cds = getPmfLevel1CdsForPfIdAndTmid(pfId, tmid);
+        List<PFCommDtl> commentaries = pfCommDtlRepository.findByPfId(pfId);
+        WorkflowContext context = new DailyPfBsWorkflowContext(pfId, tmid, requiredPmfLevel1Cds, commentaries, userRole);
+        validator.validateCommentary(context, pmfLevel1Cd, commentary, status, checkerRemarks);
+
+        PFCommDtl commDtl = new PFCommDtl();
+        commDtl.setPfId(pfId);
+        commDtl.setPmfLevel1Cd(pmfLevel1Cd);
+        commDtl.setCommentary(commentary);
+        commDtl.setStatus(status); // Set initial status from controller
+        commDtl.setCheckerRemarks(checkerRemarks); // May be null initially
+        pfCommDtlRepository.save(commDtl);
+
+        updateWorkflowStatus(pfId, tmid, userRole);
+    }
+
+    @Override
+    public void processCommentary(Integer pfId, String tmid, String pmfLevel1Cd, String status, String checkerRemarks, String userRole) {
+        List<String> requiredPmfLevel1Cds = getPmfLevel1CdsForPfIdAndTmid(pfId, tmid);
+        List<PFCommDtl> commentaries = pfCommDtlRepository.findByPfId(pfId);
+        WorkflowContext context = new DailyPfBsWorkflowContext(pfId, tmid, requiredPmfLevel1Cds, commentaries, userRole);
+        validator.validateProcess(context, pmfLevel1Cd, status, checkerRemarks);
+
+        Optional<PFCommDtl> commDtlOpt = commentaries.stream()
+            .filter(c -> c.getPfId().equals(pfId) && c.getPmfLevel1Cd().equals(pmfLevel1Cd))
+            .findFirst();
+        commDtlOpt.ifPresent(commDtl -> {
+            commDtl.setStatus(status);
+            commDtl.setCheckerRemarks(checkerRemarks);
+            pfCommDtlRepository.save(commDtl);
+        });
+
+        Optional<WFStatus> wfStatusOpt = wfStatusRepository.findById(pfId);
+        if (status.equals("APPROVED") && !rules.isAnyCommentaryRejected(context)) {
+            wfStatusOpt.ifPresent(wfStatus -> {
+                wfStatus.setStatus("APPROVED");
+                wfStatusRepository.save(wfStatus);
+            });
+        } else if (status.equals("REJECTED")) {
+            wfStatusOpt.ifPresent(wfStatus -> {
+                wfStatus.setStatus("REJECTED");
+                wfStatusRepository.save(wfStatus);
+            });
+        }
+
+        if (!status.equals("APPROVED") && !status.equals("REJECTED")) {
+            updateWorkflowStatus(pfId, tmid, userRole);
+        }
+    }
+
+    private void updateWorkflowStatus(Integer pfId, String tmid, String userRole) {
+        List<String> pmfLevel1Cds = getPmfLevel1CdsForPfIdAndTmid(pfId, tmid);
+        List<PFCommDtl> commentaries = pfCommDtlRepository.findByPfId(pfId);
+        WorkflowContext context = new DailyPfBsWorkflowContext(pfId, tmid, pmfLevel1Cds, commentaries, userRole);
+
+        WFStatus wfStatus = wfStatusRepository.findById(pfId).orElseGet(() -> {
+            WFStatus newStatus = new WFStatus();
+            newStatus.setPfId(pfId);
+            newStatus.setTmid(tmid);
+            newStatus.setWfType(context.getWorkflowType());
+            return newStatus;
+        });
+
+        wfStatus.setStatus(rules.determineNextStatus(context));
+        wfStatusRepository.save(wfStatus);
+    }
+
+    private List<String> getPmfLevel1CdsForPfIdAndTmid(Integer pfId, String tmid) {
+        // Simulate fetching pmfLevel1Cd from PF_EXP for given pfId and tmid
+        return pfExpRepository.findPmfLevel1CdsByPfIdAndTmid(pfId, tmid); // Assume custom query method
+    }
+}
+
+// Repository interfaces (updated)
+interface PFExpRepository {
+    Optional<PFExp> findById(Integer pfId);
+    List<String> findPmfLevel1CdsByPfIdAndTmid(Integer pfId, String tmid);
+}
+
+interface PFCommDtlRepository {
+    List<PFCommDtl> findByPfId(Integer pfId);
+    PFCommDtl save(PFCommDtl commDtl);
+}
+
+interface WFStatusRepository {
+    Optional<WFStatus> findById(Integer pfId);
+    WFStatus save(WFStatus wfStatus);
+}
