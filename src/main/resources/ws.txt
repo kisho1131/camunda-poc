@@ -1,68 +1,48 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, of } from 'rxjs';
+import { Observable, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 import { GraphQLService } from './graphql.service';
-
-// Import the TAB_ACCESS_MAP
 import { TAB_ACCESS_MAP } from './tab-access-map';
-
-interface ProfileCode {
-  roleName: string;
-  privilegeCode: string;
-}
 
 @Injectable({
   providedIn: 'root'
 })
 export class UserauthService {
-  private userPrivilegeSubject = new BehaviorSubject<string[]>([]);
-  public userPrivileges: Observable<string[]> = this.userPrivilegeSubject.asObservable();
-
   constructor(private graphQLService: GraphQLService) {}
 
-  public fetchUserPrivileges(): void {
-    this.graphQLService.getUserPrivileges()
-      .pipe(
-        catchError(errorHandler),
-        switchMap(response => {
-          if (response && response.data && response.data.userAccessPrivileges) {
-            const privilegeCodes = response.data.userAccessPrivileges.map((p: ProfileCode) => p.privilegeCode);
-            return of(privilegeCodes);
-          }
-          return of([]);
-        })
-      )
-      .subscribe(privilegeCodes => this.userPrivilegeSubject.next(privilegeCodes));
-  }
-
-  public getAllowedTabs(): Observable<string[]> {
-    return this.userPrivileges.pipe(
-      map(privilegeCodes => {
-        return Object.keys(TAB_ACCESS_MAP).filter(tab =>
-          TAB_ACCESS_MAP[tab].some(code => privilegeCodes.includes(code))
-        );
+  public fetchUserPrivileges(): Observable<string[]> {
+    return this.graphQLService.getUserPrivileges().pipe(
+      catchError(errorHandler),
+      switchMap(response => {
+        if (response && response.data && response.data.userAccessPrivileges) {
+          const privilegeCodes = response.data.userAccessPrivileges.map((p: any) => p.privilegeCode);
+          return of(privilegeCodes);
+        }
+        return of([]);
       })
     );
   }
 
-  public isChecker(): Observable<boolean> {
-    return this.userPrivileges.pipe(
-      map(privilegeCodes => privilegeCodes.some(code =>
-        code === 'FINAL_CNTRL' || // Adjust based on your role mapping
-        code === 'BART_READ_ONLY' || // Example mapping, adjust as needed
-        code === 'WF_INPUT_CMNT'
-      ))
+  public getAllowedTabs(privilegeCodes: string[]): string[] {
+    return Object.keys(TAB_ACCESS_MAP).filter(tab =>
+      TAB_ACCESS_MAP[tab].some(code => privilegeCodes.includes(code))
     );
   }
 
-  public isMaker(): Observable<boolean> {
-    return this.userPrivileges.pipe(
-      map(privilegeCodes => privilegeCodes.some(code =>
-        code === 'FINAL_CNTRL' || // Adjust based on your role mapping
-        code === 'BART_READ_ONLY' || // Example mapping, adjust as needed
-        code === 'WF_INPUT_CMNT'
-      ))
-    );
+  public isCheckerFromCodes(privilegeCodes: string[]): Observable<boolean> {
+    return of(privilegeCodes.some(code =>
+      code === 'FINAL_CNTRL' || // Adjust based on your role mapping
+      code === 'BART_READ_ONLY' || // Example mapping, adjust as needed
+      code === 'WF_INPUT_CMNT'
+    ));
+  }
+
+  public isMakerFromCodes(privilegeCodes: string[]): Observable<boolean> {
+    return of(privilegeCodes.some(code =>
+      code === 'FINAL_CNTRL' || // Adjust based on your role mapping
+      code === 'BART_READ_ONLY' || // Example mapping, adjust as needed
+      code === 'WF_INPUT_CMNT'
+    ));
   }
 }
 
@@ -71,63 +51,31 @@ function errorHandler(error: any): Observable<any> {
   return of([]);
 }
 
-
-import { Injectable } from '@angular/core';
-import { CanActivate, Router, ActivatedRouteSnapshot } from '@angular/router';
+import { inject } from '@angular/core';
+import { CanActivateFn, Router, ActivatedRouteSnapshot } from '@angular/router';
 import { UserauthService } from './userauth.service';
-import { Observable } from 'rxjs';
-import { map, take } from 'rxjs/operators';
-
-@Injectable({
-  providedIn: 'root'
-})
-export class AuthGuard implements CanActivate {
-  constructor(private authService: UserauthService, private router: Router) {}
-
-  canActivate(route: ActivatedRouteSnapshot): Observable<boolean> {
-    return this.authService.getAllowedTabs().pipe(
-      take(1),
-      map(allowedTabs => {
-        const requestedTab = route.routeConfig?.path;
-        if (allowedTabs.includes(requestedTab)) {
-          return true;
-        }
-        this.router.navigate(['/unauthorized']);
-        return false;
-      })
-    );
-  }
-}
-
-import { Component, OnInit } from '@angular/core';
-import { UserauthService } from './userauth.service';
-
-@Component({
-  selector: 'app-profile',
-  template: `
-    <button *ngIf="showChecker">Checker</button>
-    <button *ngIf="showMaker">Maker</button>
-  `
-})
-export class ProfileComponent implements OnInit {
-  showChecker = false;
-  showMaker = false;
-
-  constructor(private authService: UserauthService) {}
-
-  ngOnInit() {
-    this.authService.isChecker().subscribe(isChecker => this.showChecker = isChecker);
-    this.authService.isMaker().subscribe(isMaker => this.showMaker = isMaker);
-  }
-}
+import { BehaviorSubject, Observable } from 'rxjs';
+import { map, take, switchMap } from 'rxjs/operators';
+import { TAB_ACCESS_MAP } from './tab-access-map';
 
 export const authGuard: CanActivateFn = (route: ActivatedRouteSnapshot) => {
   const authService = inject(UserauthService);
   const router = inject(Router);
 
-  return authService.getAllowedTabs().pipe(
-    take(1),
-    map(allowedTabs => {
+  // Initialize BehaviorSubject to manage privilege state
+  const privilegeSubject = new BehaviorSubject<string[]>([]);
+  const privileges$ = privilegeSubject.asObservable();
+
+  // Fetch privileges on guard initialization
+  authService.fetchUserPrivileges().pipe(
+    take(1)
+  ).subscribe(privilegeCodes => {
+    privilegeSubject.next(privilegeCodes);
+  });
+
+  return privileges$.pipe(
+    map(privilegeCodes => {
+      const allowedTabs = authService.getAllowedTabs(privilegeCodes);
       const requestedTab = route.routeConfig?.path;
       if (allowedTabs.includes(requestedTab)) {
         return true;
@@ -137,10 +85,3 @@ export const authGuard: CanActivateFn = (route: ActivatedRouteSnapshot) => {
     })
   );
 };
-
-  ngOnInit(): void {
-    this.userAuthService.fetchUserPrivileges();
-    this.userAuthService.getAllowedTabs().subscribe(allowedTabs => {
-      this.filteredTabs = this.tabs.filter(tab => allowedTabs.includes(tab.id.toString()));
-    });
-  }
