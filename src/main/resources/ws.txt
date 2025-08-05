@@ -85,3 +85,21 @@ export const authGuard: CanActivateFn = (route: ActivatedRouteSnapshot) => {
     })
   );
 };
+
+ngOnInit(): void {
+    this.userAuthService.fetchUserPrivileges().pipe(
+      map(privilegeCodes => this.userAuthService.getAllowedTabs(privilegeCodes))
+    ).subscribe(allowedTabs => {
+      this.filteredTabs = this.tabs.filter(tab => allowedTabs.includes(tab.id.toString()));
+    })
+
+
+
+      ngOnInit() {
+        this.authService.fetchUserPrivileges().pipe(
+          switchMap(privilegeCodes => this.authService.isCheckerFromCodes(privilegeCodes))
+        ).subscribe(isChecker => this.showChecker = isChecker);
+        this.authService.fetchUserPrivileges().pipe(
+          switchMap(privilegeCodes => this.authService.isMakerFromCodes(privilegeCodes))
+        ).subscribe(isMaker => this.showMaker = isMaker);
+      }
