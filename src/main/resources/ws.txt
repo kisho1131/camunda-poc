@@ -120,3 +120,20 @@ export class ProfileComponent implements OnInit {
     this.authService.isMaker().subscribe(isMaker => this.showMaker = isMaker);
   }
 }
+
+export const authGuard: CanActivateFn = (route: ActivatedRouteSnapshot) => {
+  const authService = inject(UserauthService);
+  const router = inject(Router);
+
+  return authService.getAllowedTabs().pipe(
+    take(1),
+    map(allowedTabs => {
+      const requestedTab = route.routeConfig?.path;
+      if (allowedTabs.includes(requestedTab)) {
+        return true;
+      }
+      router.navigate(['/unauthorized']);
+      return false;
+    })
+  );
+};
