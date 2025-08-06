@@ -103,3 +103,68 @@ ngOnInit(): void {
           switchMap(privilegeCodes => this.authService.isMakerFromCodes(privilegeCodes))
         ).subscribe(isMaker => this.showMaker = isMaker);
       }
+
+
+import { Injectable } from '@angular/core';
+import { BehaviorSubject, Observable, of } from 'rxjs';
+import { catchError, map, switchMap, shareReplay, tap } from 'rxjs/operators';
+import { GraphQLService } from './graphql.service';
+import { TAB_ACCESS_MAP } from './tab-access-map';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class UserauthService {
+  private privilegeSubject = new BehaviorSubject<string[]>([]);
+  public privileges$ = this.privilegeSubject.asObservable();
+  private fetchPrivileges$ = this.fetchUserPrivileges().pipe(
+    shareReplay(1) // Cache the first emission and share it
+  );
+
+  constructor(private graphQLService: GraphQLService) {
+    // Trigger the fetch and update the subject
+    this.fetchPrivileges$.subscribe({
+      next: privilegeCodes => this.privilegeSubject.next(privilegeCodes),
+      error: err => {
+        console.error('Error fetching privileges:', err);
+        this.privilegeSubject.next([]); // Fallback to empty array on error
+      }
+    });
+  }
+
+  public fetchUserPrivileges(): Observable<string[]> {
+    return this.graphQLService.getUserPrivileges().pipe(
+      catchError(errorHandler),
+      switchMap(response => {
+        if (response && response.data && response.data.userAccessPrivileges) {
+          const privilegeCodes = response.data.userAccessPrivileges.map((p: any) => p.privilegeCode);
+          return of(privilegeCodes);
+        }
+        return of([]);
+      })
+    );
+  }
+
+  public getAllowedTabs(): Observable<string[]> {
+    return this.privileges$.pipe(
+      map(privilegeCodes => Object.keys(TAB_ACCESS_MAP).filter(tab =>
+        TAB_ACCESS_MAP[tab].some(code => privilegeCodes.includes(code))
+      ))
+    );
+  }
+
+  public isDashboardAccessible(privilegeCode: string): Observable<boolean> {
+    return this.privileges$.pipe(
+      map(privilegeCodes => privilegeCodes.includes(privilegeCode))
+    );
+  }
+
+  public getPrivileges(): Observable<string[]> {
+    return this.privileges$;
+  }
+}
+
+function errorHandler(error: any): Observable<any> {
+  console.error('No Data Found', error);
+  return of([]);
+}
