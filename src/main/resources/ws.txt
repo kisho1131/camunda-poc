@@ -168,3 +168,46 @@ function errorHandler(error: any): Observable<any> {
   console.error('No Data Found', error);
   return of([]);
 }
+
+
+
+
+export class UserauthService {
+  private userPrivilegeSubject = new BehaviorSubject<string[]>([]);
+  public userPrivilege$ = this.userPrivilegeSubject.asObservable();
+
+  private allowedTabsSubject = new BehaviorSubject<string[]>([]);
+  public allowedTabs$ = this.allowedTabsSubject.asObservable();
+
+  constructor(private graphqlService: GraphqlService) {}
+
+  public fetchUserPrivileges(): void {
+    this.graphqlService
+      .getUserPrivileges()
+      .pipe(catchError(errorHandler))
+      .subscribe((response: any) => {
+        if (response && response.data && response.data.userAccessPrivileges) {
+          const privileges = response.data.userAccessPrivileges;
+          if (privileges) {
+            const codes = privileges.map(
+              (p: { privilegeCode: any }) => p.privilegeCode
+            );
+
+            this.userPrivilegeSubject.next(codes);
+
+            const allowedTabs = Object.keys(TAB_ACCESS_MAP).filter((tab) =>
+              TAB_ACCESS_MAP[tab].some((code) => codes.includes(code))
+            );
+
+            this.allowedTabsSubject.next(allowedTabs);
+          }
+        } else {
+          console.error('No Data Found');
+        }
+      });
+  }
+
+  public getAllowedTabs(): Observable<string[]> {
+    return this.allowedTabs$;
+  }
+}
