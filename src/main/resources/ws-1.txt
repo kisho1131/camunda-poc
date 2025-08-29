@@ -1,60 +1,32 @@
-// assume StatusCode is an enum/string union available in your codebase
-// e.g. enum StatusCode { APPROVED='APPROVED', REJECTED='REJECTED', COMPLETED='COMPLETED', CREATED='CREATED' }
-
 disableSubmitCommentaryBtn(): boolean {
   const profiles = this.profileDetails ?? [];
-  const statusList = profiles.map(p => p?.statusCd ?? null);
+  if (!profiles.length) return true;
 
-  // quick guards
-  if (!profiles.length) return true; // nothing to act on -> disable
+  const statuses = profiles.map(p => p?.statusCd ?? null);
 
-  // 1) incomplete commentary check (your existing logic)
-  const hasIncompleteCommentary = Array.isArray(this.profileStatus)
-    ? this.profileStatus.some(ps => ps.incomplete !== 0)
-    : false;
-  if (hasIncompleteCommentary) return true;
+  // helpers
+  const allEqual = (val: string) => statuses.every(s => s === val);
+  const hasAny = (val: string | null) => statuses.includes(val);
+  const hasInProgress = statuses.some(
+    s => ['IN_PROGRESS', 'INPROGRESS'].includes(String(s))
+  );
 
-  // 2) all-approved / all-rejected / all-completed => disable
-  const allApproved = profiles.every(p => p.statusCd === StatusCode.APPROVED);
-  if (allApproved) return true;
-  const allRejected = profiles.every(p => p.statusCd === StatusCode.REJECTED);
-  if (allRejected) return true;
-  const allCompleted = profiles.every(p => p.statusCd === StatusCode.COMPLETED);
-  if (allCompleted) return true;
+  // 1. Incomplete commentary
+  if (this.profileStatus?.some(ps => ps.incomplete !== 0)) return true;
 
-  // 3) pending (null/undefined status) -> disable
-  const hasPendingStatus = statusList.some(s => s === null);
-  if (hasPendingStatus) return true;
+  // 2. All uniform states
+  if (allEqual('APPROVED') || allEqual('REJECTED') || allEqual('COMPLETED')) return true;
 
-  // 4) helpers: presence flags
-  const hasCreated = statusList.some(s => s === StatusCode.CREATED);
-  const hasApproved = statusList.some(s => s === StatusCode.APPROVED);
-  const hasRejected = statusList.some(s => s === StatusCode.REJECTED);
-  const hasCompleted = statusList.some(s => s === StatusCode.COMPLETED);
+  // 3. Pending (null)
+  if (hasAny(null)) return true;
 
-  // 5) detect "in-progress"-like statuses (common name variants)
-  // If your app uses a specific code like IN_PROGRESS, replace/add it here.
-  const IN_PROGRESS_VARIANTS = new Set(['IN_PROGRESS', 'INPROGRESS', 'IN_PROGRESS_STATUS', 'INPROG']);
-  const hasInProgress = statusList.some(s => s != null && IN_PROGRESS_VARIANTS.has(String(s)));
+  // 4. Blocking combos
+  if ((hasAny('REJECTED') && hasInProgress) ||
+      (hasAny('COMPLETED') && hasInProgress)) return true;
 
-  // 6) blocking mixed combos:
-  // - rejected + in-progress => disable (explicit rule you requested)
-  if (hasRejected && hasInProgress) return true;
+  // 5. Enable when CREATED exists without blockers
+  if (hasAny('CREATED') && !hasInProgress) return false;
 
-  // - completed + in-progress => disable (likely blocking)
-  if (hasCompleted && hasInProgress) return true;
-
-  // 7) enable (i.e. return false) in the intentional enable-cases:
-  //    If there's at least one CREATED and none of the blocking conditions (pending/incomplete/in-progress combo)
-  if (hasCreated && !hasPendingStatus && !hasIncompleteCommentary && !hasInProgress) {
-    // CREATED combined with APPROVED or REJECTED is allowed per your examples
-    // so we allow the submit flow here
-    return false; // => NOT disabled
-  }
-
-  // 8) other mixed states:
-  //    approved + created already handled above (enabled).
-  //    For any other ambiguous mix (e.g. approved + rejected, or others), be conservative:
-  //    disable by default so you don't allow unsafe submits.
+  // 6. Default: disable
   return true;
 }
