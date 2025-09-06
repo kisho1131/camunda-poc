@@ -1,70 +1,71 @@
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+public CompletableFuture<Map<ProfileDetails, CommentaryDetails>> getCommentariesDetails(
+        List<ProfileDetails> profileDetails) {
 
-public class BusinessCommentaryService {
-    private static final Logger log = LoggerFactory.getLogger(BusinessCommentaryService.class);
+    Set<Long> pfIds = profileDetails.stream()
+            .map(ProfileDetails::getPfId)
+            .map(Integer::longValue)
+            .collect(Collectors.toSet());
 
-    private final Executor executor;
-    private final ExceptionProfileViewRepository exceptionProfileViewRepository;
-    private final BusinessCommentaryRepository businessCommentaryRepository;
-    private final UserDetailsRepository userDetailsRepository;
+    Long tmId = profileDetails.getFirst().getTmId().longValue();
 
-    public BusinessCommentaryService(Executor executor,
-                                     ExceptionProfileViewRepository exceptionProfileViewRepository,
-                                     BusinessCommentaryRepository businessCommentaryRepository,
-                                     UserDetailsRepository userDetailsRepository) {
-        this.executor = executor;
-        this.exceptionProfileViewRepository = exceptionProfileViewRepository;
-        this.businessCommentaryRepository = businessCommentaryRepository;
-        this.userDetailsRepository = userDetailsRepository;
-    }
+    // Parallel calls
+    CompletableFuture<List<ProfileCommentaryEntity>> commentaryFuture =
+            CompletableFuture.supplyAsync(() ->
+                    profileCommentaryRepository.findByTmIdAndPfIdIn(tmId, pfIds),
+                    executor.graphQlThreadExecutor());
 
-    public CompletableFuture<List<BusinessCommentary>> getBusinessCommentaryAsync(Integer tmId, List<Integer> mshLevel4Cds) {
-        long start = System.currentTimeMillis();
+    CompletableFuture<List<WorkflowStatusEntity>> workflowFuture =
+            CompletableFuture.supplyAsync(() ->
+                    workflowStatusRepository.findAllByUnitIdInAndTmIdAndWfTyp(
+                            pfIds.stream().map(Long::intValue).collect(Collectors.toSet()),
+                            tmId,
+                            WorkflowType.DLY_BS_PF.name()),
+                    executor.graphQlThreadExecutor());
 
-        CompletableFuture<List<ExceptionProfileView>> exceptionProfilesFuture =
-                CompletableFuture.supplyAsync(() -> {
-                    log.info("[{}] Starting exceptionProfileViewRepository at {}",
-                              Thread.currentThread().getName(), System.currentTimeMillis());
-                    List<ExceptionProfileView> result =
-                            exceptionProfileViewRepository.findAllByTmIdAndMngdSegLvl4CdIn(tmId, mshLevel4Cds);
-                    log.info("[{}] Finished exceptionProfileViewRepository at {} (took {} ms)",
-                              Thread.currentThread().getName(), System.currentTimeMillis(),
-                              (System.currentTimeMillis() - start));
-                    return result;
-                }, executor);
+    // This one depends on commentaryEntities → chain it
+    CompletableFuture<List<UserDao>> userFuture = commentaryFuture.thenApplyAsync(commentaryEntities -> {
+        if (Objects.isNull(commentaryEntities) || commentaryEntities.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return userDetailsRepository.getUserDetailsBySoeId(getRequiredSoeIds(commentaryEntities));
+    }, executor.graphQlThreadExecutor());
 
-        CompletableFuture<List<BusinessCommentaryEntity>> commentaryFuture =
-                CompletableFuture.supplyAsync(() -> {
-                    log.info("[{}] Starting businessCommentaryRepository at {}",
-                              Thread.currentThread().getName(), System.currentTimeMillis());
-                    List<BusinessCommentaryEntity> result =
-                            businessCommentaryRepository.findAllByTmIdAndMshLevel4CdInAndPmfAcctLvl1CdIn(tmId, mshLevel4Cds, List.of());
-                    log.info("[{}] Finished businessCommentaryRepository at {} (took {} ms)",
-                              Thread.currentThread().getName(), System.currentTimeMillis(),
-                              (System.currentTimeMillis() - start));
-                    return result;
-                }, executor);
+    // Combine all
+    return commentaryFuture.thenCombineAsync(workflowFuture, (commentaryEntities, workflowEntities) -> {
+        // Mapping after both are done
+        return Map.entry(commentaryEntities, workflowEntities);
+    }, executor.graphQlThreadExecutor()).thenCombineAsync(userFuture, (entry, userDetails) -> {
+        List<ProfileCommentaryEntity> commentaryEntities = entry.getKey();
+        List<WorkflowStatusEntity> workflowEntities = entry.getValue();
 
-        CompletableFuture<List<UserDao>> usersFuture =
-                CompletableFuture.supplyAsync(() -> {
-                    log.info("[{}] Starting userDetailsRepository at {}",
-                              Thread.currentThread().getName(), System.currentTimeMillis());
-                    List<UserDao> result = userDetailsRepository.getUserDetailsBySoeId(Set.of());
-                    log.info("[{}] Finished userDetailsRepository at {} (took {} ms)",
-                              Thread.currentThread().getName(), System.currentTimeMillis(),
-                              (System.currentTimeMillis() - start));
-                    return result;
-                }, executor);
+        if (Objects.isNull(commentaryEntities) || commentaryEntities.isEmpty()) {
+            return Map.<ProfileDetails, CommentaryDetails>of();
+        }
 
-        return CompletableFuture.allOf(exceptionProfilesFuture, commentaryFuture, usersFuture)
-                .thenApply(v -> {
-                    List<ExceptionProfileView> profiles = exceptionProfilesFuture.join();
-                    List<BusinessCommentaryEntity> commentary = commentaryFuture.join();
-                    List<UserDao> users = usersFuture.join();
+        List<CommentaryDetails> commentaryDetails = EntityToDtoMapper
+                .mapToCommentaryDetailsList(commentaryEntities, userDetails);
 
-                    log.info("All DB calls completed in {} ms", (System.currentTimeMillis() - start));
-                    return EntityToDtoMapper.mapToBusinessCommentaryList(profiles, commentary, users);
-                });
-    }
+        workflowHelper.updateStatusCodes(workflowEntities, commentaryDetails);
+
+        Map<ProfileCommentaryKey, CommentaryDetails> commentaryMap = commentaryDetails.stream()
+                .collect(Collectors.toMap(
+                        dt -> new ProfileCommentaryKey(dt.getPfId().longValue(),
+                                                       dt.getTmId().longValue(),
+                                                       dt.getPmfAcctLevel1Cd().longValue(),
+                                                       dt.getPmfAcctLevel2Cd().longValue()),
+                        Function.identity()
+                ));
+
+        return profileDetails.stream()
+                .collect(Collectors.toMap(
+                        Function.identity(),
+                        p -> commentaryMap.getOrDefault(
+                                new ProfileCommentaryKey(p.getPfId().longValue(),
+                                                         p.getTmId().longValue(),
+                                                         p.getPmfAcctLevel1Cd().longValue(),
+                                                         p.getPmfAcctLevel2Cd().longValue()),
+                                new CommentaryDetails()
+                        )
+                ));
+    }, executor.graphQlThreadExecutor());
 }
