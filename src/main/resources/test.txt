@@ -1,62 +1,70 @@
-public List<BusinessCommentary> getBusinessCommentaryByMshLevel4(Integer tmId, List<Integer> mshLevel4Cds) {
-    if (tmId == null || mshLevel4Cds == null || mshLevel4Cds.isEmpty()) {
-        throw new IllegalArgumentException("tmId and mshLevel4Cds must not be null or empty");
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class BusinessCommentaryService {
+    private static final Logger log = LoggerFactory.getLogger(BusinessCommentaryService.class);
+
+    private final Executor executor;
+    private final ExceptionProfileViewRepository exceptionProfileViewRepository;
+    private final BusinessCommentaryRepository businessCommentaryRepository;
+    private final UserDetailsRepository userDetailsRepository;
+
+    public BusinessCommentaryService(Executor executor,
+                                     ExceptionProfileViewRepository exceptionProfileViewRepository,
+                                     BusinessCommentaryRepository businessCommentaryRepository,
+                                     UserDetailsRepository userDetailsRepository) {
+        this.executor = executor;
+        this.exceptionProfileViewRepository = exceptionProfileViewRepository;
+        this.businessCommentaryRepository = businessCommentaryRepository;
+        this.userDetailsRepository = userDetailsRepository;
     }
 
-    Executor executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
+    public CompletableFuture<List<BusinessCommentary>> getBusinessCommentaryAsync(Integer tmId, List<Integer> mshLevel4Cds) {
+        long start = System.currentTimeMillis();
 
-    // Run repo calls in parallel
-    CompletableFuture<List<ExceptionProfileView>> exceptionProfilesFuture =
-            CompletableFuture.supplyAsync(() ->
-                    exceptionProfileViewRepository.findAllByTmIdAndMngdSegLvl4CdIn(tmId, mshLevel4Cds), executor);
+        CompletableFuture<List<ExceptionProfileView>> exceptionProfilesFuture =
+                CompletableFuture.supplyAsync(() -> {
+                    log.info("[{}] Starting exceptionProfileViewRepository at {}",
+                              Thread.currentThread().getName(), System.currentTimeMillis());
+                    List<ExceptionProfileView> result =
+                            exceptionProfileViewRepository.findAllByTmIdAndMngdSegLvl4CdIn(tmId, mshLevel4Cds);
+                    log.info("[{}] Finished exceptionProfileViewRepository at {} (took {} ms)",
+                              Thread.currentThread().getName(), System.currentTimeMillis(),
+                              (System.currentTimeMillis() - start));
+                    return result;
+                }, executor);
 
-    CompletableFuture<List<BusinessCommentaryEntity>> businessCommentaryEntitiesFuture =
-            CompletableFuture.supplyAsync(() ->
-                    businessCommentaryRepository.findAllByTmIdAndMshLevel4CdInAndPmfAcctLvl1CdIn(
-                            tmId,
-                            mshLevel4Cds,
-                            exceptionProfilesFuture.join().stream()
-                                    .map(ExceptionProfileView::getPmfAcctLvl1Cd)
-                                    .distinct()
-                                    .toList()
-                    ), executor);
+        CompletableFuture<List<BusinessCommentaryEntity>> commentaryFuture =
+                CompletableFuture.supplyAsync(() -> {
+                    log.info("[{}] Starting businessCommentaryRepository at {}",
+                              Thread.currentThread().getName(), System.currentTimeMillis());
+                    List<BusinessCommentaryEntity> result =
+                            businessCommentaryRepository.findAllByTmIdAndMshLevel4CdInAndPmfAcctLvl1CdIn(tmId, mshLevel4Cds, List.of());
+                    log.info("[{}] Finished businessCommentaryRepository at {} (took {} ms)",
+                              Thread.currentThread().getName(), System.currentTimeMillis(),
+                              (System.currentTimeMillis() - start));
+                    return result;
+                }, executor);
 
-    // When both profiles and commentary are ready, fetch users
-    CompletableFuture<List<UserDao>> userDetailsFuture =
-            exceptionProfilesFuture.thenCombineAsync(businessCommentaryEntitiesFuture,
-                    (exceptionProfiles, businessCommentaryEntities) -> {
-                        Set<String> userSoeIds = businessCommentaryEntities.stream()
-                                .map(BusinessCommentaryEntity::getPublisherId)
-                                .collect(Collectors.toSet());
+        CompletableFuture<List<UserDao>> usersFuture =
+                CompletableFuture.supplyAsync(() -> {
+                    log.info("[{}] Starting userDetailsRepository at {}",
+                              Thread.currentThread().getName(), System.currentTimeMillis());
+                    List<UserDao> result = userDetailsRepository.getUserDetailsBySoeId(Set.of());
+                    log.info("[{}] Finished userDetailsRepository at {} (took {} ms)",
+                              Thread.currentThread().getName(), System.currentTimeMillis(),
+                              (System.currentTimeMillis() - start));
+                    return result;
+                }, executor);
 
-                        if (userSoeIds.isEmpty()) {
-                            return Collections.<UserDao>emptyList();
-                        }
-                        return userDetailsRepository.getUserDetailsBySoeId(userSoeIds);
-                    }, executor);
+        return CompletableFuture.allOf(exceptionProfilesFuture, commentaryFuture, usersFuture)
+                .thenApply(v -> {
+                    List<ExceptionProfileView> profiles = exceptionProfilesFuture.join();
+                    List<BusinessCommentaryEntity> commentary = commentaryFuture.join();
+                    List<UserDao> users = usersFuture.join();
 
-    // Merge results
-    return CompletableFuture.allOf(exceptionProfilesFuture, businessCommentaryEntitiesFuture, userDetailsFuture)
-            .thenApply(v -> {
-                List<ExceptionProfileView> exceptionProfiles = exceptionProfilesFuture.join();
-                List<BusinessCommentaryEntity> businessCommentaryEntities = businessCommentaryEntitiesFuture.join();
-                List<UserDao> userDetails = userDetailsFuture.join();
-
-                Map<BusinessCommentaryKey, List<ExceptionProfileView>> exceptionProfileMap =
-                        exceptionProfiles.stream()
-                                .collect(Collectors.groupingBy(ep ->
-                                        new BusinessCommentaryKey(ep.getTmId(), ep.getPmfAcctLvl1Cd(), ep.getMngdSegLvl4Cd())));
-
-                Map<BusinessCommentaryKey, BusinessCommentaryEntity> businessCommentaryMap =
-                        businessCommentaryEntities.stream()
-                                .collect(Collectors.toMap(
-                                        entity -> new BusinessCommentaryKey(
-                                                Long.valueOf(entity.getTmId()),
-                                                entity.getPmfAcctLvl1Cd(),
-                                                entity.getMshLevel4Cd()),
-                                        Function.identity(),
-                                        (existing, replacement) -> existing));
-
-                return EntityToDtoMapper.mapToBusinessCommentaryList(exceptionProfileMap, businessCommentaryMap, userDetails);
-            }).join(); // block until all done
+                    log.info("All DB calls completed in {} ms", (System.currentTimeMillis() - start));
+                    return EntityToDtoMapper.mapToBusinessCommentaryList(profiles, commentary, users);
+                });
+    }
 }
