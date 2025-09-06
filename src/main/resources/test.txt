@@ -1,0 +1,62 @@
+public List<BusinessCommentary> getBusinessCommentaryByMshLevel4(Integer tmId, List<Integer> mshLevel4Cds) {
+    if (tmId == null || mshLevel4Cds == null || mshLevel4Cds.isEmpty()) {
+        throw new IllegalArgumentException("tmId and mshLevel4Cds must not be null or empty");
+    }
+
+    Executor executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
+
+    // Run repo calls in parallel
+    CompletableFuture<List<ExceptionProfileView>> exceptionProfilesFuture =
+            CompletableFuture.supplyAsync(() ->
+                    exceptionProfileViewRepository.findAllByTmIdAndMngdSegLvl4CdIn(tmId, mshLevel4Cds), executor);
+
+    CompletableFuture<List<BusinessCommentaryEntity>> businessCommentaryEntitiesFuture =
+            CompletableFuture.supplyAsync(() ->
+                    businessCommentaryRepository.findAllByTmIdAndMshLevel4CdInAndPmfAcctLvl1CdIn(
+                            tmId,
+                            mshLevel4Cds,
+                            exceptionProfilesFuture.join().stream()
+                                    .map(ExceptionProfileView::getPmfAcctLvl1Cd)
+                                    .distinct()
+                                    .toList()
+                    ), executor);
+
+    // When both profiles and commentary are ready, fetch users
+    CompletableFuture<List<UserDao>> userDetailsFuture =
+            exceptionProfilesFuture.thenCombineAsync(businessCommentaryEntitiesFuture,
+                    (exceptionProfiles, businessCommentaryEntities) -> {
+                        Set<String> userSoeIds = businessCommentaryEntities.stream()
+                                .map(BusinessCommentaryEntity::getPublisherId)
+                                .collect(Collectors.toSet());
+
+                        if (userSoeIds.isEmpty()) {
+                            return Collections.<UserDao>emptyList();
+                        }
+                        return userDetailsRepository.getUserDetailsBySoeId(userSoeIds);
+                    }, executor);
+
+    // Merge results
+    return CompletableFuture.allOf(exceptionProfilesFuture, businessCommentaryEntitiesFuture, userDetailsFuture)
+            .thenApply(v -> {
+                List<ExceptionProfileView> exceptionProfiles = exceptionProfilesFuture.join();
+                List<BusinessCommentaryEntity> businessCommentaryEntities = businessCommentaryEntitiesFuture.join();
+                List<UserDao> userDetails = userDetailsFuture.join();
+
+                Map<BusinessCommentaryKey, List<ExceptionProfileView>> exceptionProfileMap =
+                        exceptionProfiles.stream()
+                                .collect(Collectors.groupingBy(ep ->
+                                        new BusinessCommentaryKey(ep.getTmId(), ep.getPmfAcctLvl1Cd(), ep.getMngdSegLvl4Cd())));
+
+                Map<BusinessCommentaryKey, BusinessCommentaryEntity> businessCommentaryMap =
+                        businessCommentaryEntities.stream()
+                                .collect(Collectors.toMap(
+                                        entity -> new BusinessCommentaryKey(
+                                                Long.valueOf(entity.getTmId()),
+                                                entity.getPmfAcctLvl1Cd(),
+                                                entity.getMshLevel4Cd()),
+                                        Function.identity(),
+                                        (existing, replacement) -> existing));
+
+                return EntityToDtoMapper.mapToBusinessCommentaryList(exceptionProfileMap, businessCommentaryMap, userDetails);
+            }).join(); // block until all done
+}
