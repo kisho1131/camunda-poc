@@ -1,0 +1,170 @@
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class EvidenceReportService {
+
+    @Autowired
+    private GenericDatabaseQueryExecutor genericDatabaseQueryExecutor;
+
+    public Map<String, List<Map<String, Object>>> getGroupedDataForEmail(RequestModel requestModel) {
+        // 1. Fetch data from DB
+        List<Map<String, Object>> rawData = genericDatabaseQueryExecutor.fetchDataFromDatabase(
+                "SELECT * FROM YOUR_TABLE WHERE TM_ID = ?", requestModel.getTmId()
+        );
+
+        if (rawData == null || rawData.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        // 2. Group by PMF Level 1 and add totals as first row
+        return rawData.stream()
+                .collect(Collectors.groupingBy(
+                        row -> (String) row.get("pmfAcctLvl1Desc"),
+                        LinkedHashMap::new, // keep order
+                        Collectors.collectingAndThen(Collectors.toList(), list -> {
+                            double l1MtdTotal = list.stream().mapToDouble(r -> ((Number) r.get("mtdBookValue")).doubleValue()).sum();
+                            double l1CurrentTotal = list.stream().mapToDouble(r -> ((Number) r.get("currentBookValue")).doubleValue()).sum();
+                            double l1PriorTotal = list.stream().mapToDouble(r -> ((Number) r.get("priorBookValue")).doubleValue()).sum();
+                            double l1DodTotal = list.stream().mapToDouble(r -> ((Number) r.get("dodVariance")).doubleValue()).sum();
+
+                            Map<String, Object> l1TotalsRow = new LinkedHashMap<>();
+                            l1TotalsRow.put("isL1Total", true);
+                            l1TotalsRow.put("pmfAcctLvl1Desc", list.get(0).get("pmfAcctLvl1Desc"));
+                            l1TotalsRow.put("mtdBookValue", l1MtdTotal);
+                            l1TotalsRow.put("currentBookValue", l1CurrentTotal);
+                            l1TotalsRow.put("priorBookValue", l1PriorTotal);
+                            l1TotalsRow.put("dodVariance", l1DodTotal);
+
+                            List<Map<String, Object>> newList = new ArrayList<>();
+                            newList.add(l1TotalsRow); // totals row first
+                            newList.addAll(list);     // then actual data rows
+                            return newList;
+                        })
+                ));
+    }
+}
+
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.freemarker.FreeMarkerTemplateUtils;
+
+import javax.mail.internet.MimeMessage;
+import java.util.HashMap;
+import java.util.Map;
+
+@Controller
+public class EvidenceReportController {
+
+    @Autowired
+    private EvidenceReportService evidenceReportService;
+
+    @Autowired
+    private freemarker.template.Configuration freemarkerConfig;
+
+    @Autowired
+    private JavaMailSender mailSender;
+
+    public void sendEvidenceReportEmail(RequestModel requestModel) throws Exception {
+        // 1. Get grouped data
+        Map<String, List<Map<String, Object>>> groupedData = evidenceReportService.getGroupedDataForEmail(requestModel);
+
+        // 2. Prepare model for FreeMarker
+        Map<String, Object> model = new HashMap<>();
+        model.put("groupedData", groupedData);
+
+        // 3. Process template
+        String htmlBody = FreeMarkerTemplateUtils.processTemplateIntoString(
+                freemarkerConfig.getTemplate("evidence-report.ftl"), model
+        );
+
+        // 4. Send Email
+        MimeMessage message = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(message, true);
+        helper.setTo("recipient@example.com");
+        helper.setSubject("Daily Evidence Report");
+        helper.setText(htmlBody, true); // true = HTML
+
+        mailSender.send(message);
+    }
+}
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; }
+        th { background-color: #f2f2f2; text-align: left; }
+        .level1 { font-weight: bold; background-color: #e6f2ff; }
+        .level2 td { padding-left: 20px; }
+        .level3 td { padding-left: 40px; font-style: italic; }
+        .positive { color: green; }
+        .negative { color: red; }
+    </style>
+</head>
+<body>
+    <h2>Daily Evidence Report</h2>
+
+    <#list groupedData?keys as pmfL1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Account</th>
+                    <th>MTD Book</th>
+                    <th>Current Book</th>
+                    <th>Prior Book</th>
+                    <th>DoD Variance</th>
+                </tr>
+            </thead>
+            <tbody>
+                <#list groupedData[pmfL1] as row>
+                    <#if row.isL1Total?? && row.isL1Total>
+                        <tr class="level1">
+                            <td>${row.pmfAcctLvl1Desc}</td>
+                            <td>${row.mtdBookValue?string(",##0.00")}</td>
+                            <td>${row.currentBookValue?string(",##0.00")}</td>
+                            <td>${row.priorBookValue?string(",##0.00")}</td>
+                            <td class="${row.dodVariance < 0?string('negative','positive')}">
+                                ${row.dodVariance?string(",##0.00")}
+                            </td>
+                        </tr>
+                    <#else>
+                        <tr class="level2">
+                            <td>${row.pmfAcctLvl2Desc}</td>
+                            <td>${row.mtdBookValue?string(",##0.00")}</td>
+                            <td>${row.currentBookValue?string(",##0.00")}</td>
+                            <td>${row.priorBookValue?string(",##0.00")}</td>
+                            <td class="${row.dodVariance < 0?string('negative','positive')}">
+                                ${row.dodVariance?string(",##0.00")}
+                            </td>
+                        </tr>
+
+                        <#if row.pmfLevel3??>
+                            <tr class="level3">
+                                <td>
+                                    ${row.pmfLevel3}
+                                    <#if row.pmfLevel4??> → ${row.pmfLevel4}</#if>
+                                    <#if row.pmfLevel5??> → ${row.pmfLevel5}</#if>
+                                </td>
+                                <td>${row.mtdBookValue?string(",##0.00")}</td>
+                                <td>${row.currentBookValue?string(",##0.00")}</td>
+                                <td>${row.priorBookValue?string(",##0.00")}</td>
+                                <td class="${row.dodVariance < 0?string('negative','positive')}">
+                                    ${row.dodVariance?string(",##0.00")}
+                                </td>
+                            </tr>
+                        </#if>
+                    </#if>
+                </#list>
+            </tbody>
+        </table>
+        <br/>
+    </#list>
+</body>
+</html>
