@@ -219,3 +219,105 @@ public class PmfHierarchyService {
 
 </body>
 </html>
+
+
+
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class PmfHierarchyService {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public PmfHierarchyService(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public List<Map<String, Object>> buildHierarchy() {
+
+        String sql = """
+            SELECT pmf_acct_lvl_1_desc AS pmfAcctLvl1Desc,
+                   pmf_acct_lvl_2_desc AS pmfAcctLvl2Desc,
+                   pmf_level_3 AS pmfLevel3,
+                   current_book_value AS currentBookValue,
+                   prior_book_value AS priorBookValue,
+                   mtd_book_value AS mtdBookValue,
+                   dod_variance AS dodVariance,
+                   mtd_variance AS mtdVariance
+            FROM your_table
+        """;
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+
+        // Group by Level 1
+        Map<Object, List<Map<String, Object>>> groupedByL1 =
+                rows.stream().collect(Collectors.groupingBy(r -> r.get("pmfAcctLvl1Desc"),
+                        LinkedHashMap::new, Collectors.toList()));
+
+        List<Map<String, Object>> hierarchy = new ArrayList<>();
+
+        groupedByL1.forEach((lvl1Key, lvl1Rows) -> {
+            Map<String, Object> lvl1Node = makeNode(lvl1Key, lvl1Rows);
+
+            // Group by Level 2
+            Map<Object, List<Map<String, Object>>> groupedByL2 =
+                    lvl1Rows.stream().collect(Collectors.groupingBy(r -> r.get("pmfAcctLvl2Desc"),
+                            LinkedHashMap::new, Collectors.toList()));
+
+            List<Map<String, Object>> lvl2Children = new ArrayList<>();
+            groupedByL2.forEach((lvl2Key, lvl2Rows) -> {
+                Map<String, Object> lvl2Node = makeNode(lvl2Key, lvl2Rows);
+
+                // Group by Level 3
+                Map<Object, List<Map<String, Object>>> groupedByL3 =
+                        lvl2Rows.stream().collect(Collectors.groupingBy(r -> r.get("pmfLevel3"),
+                                LinkedHashMap::new, Collectors.toList()));
+
+                List<Map<String, Object>> lvl3Children = new ArrayList<>();
+                groupedByL3.forEach((lvl3Key, lvl3Rows) -> {
+                    lvl3Children.add(makeNode(lvl3Key, lvl3Rows));
+                });
+
+                lvl2Node.put("children", lvl3Children);
+                lvl2Children.add(lvl2Node);
+            });
+
+            lvl1Node.put("children", lvl2Children);
+            hierarchy.add(lvl1Node);
+        });
+
+        return hierarchy;
+    }
+
+    private Map<String, Object> makeNode(Object key, List<Map<String, Object>> rows) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        node.put("description", key);
+        node.put("currentBookValue", sum(rows, "currentBookValue"));
+        node.put("priorBookValue", sum(rows, "priorBookValue"));
+        node.put("mtdBookValue", sum(rows, "mtdBookValue"));
+        node.put("dodVariance", sum(rows, "dodVariance"));
+        node.put("mtdVariance", sum(rows, "mtdVariance"));
+        return node;
+    }
+
+    private BigDecimal sum(List<Map<String, Object>> rows, String key) {
+        return rows.stream()
+                .map(r -> r.get(key))
+                .filter(Objects::nonNull)
+                .map(this::toBigDecimal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal toBigDecimal(Object val) {
+        if (val instanceof BigDecimal) return (BigDecimal) val;
+        if (val instanceof Number) return BigDecimal.valueOf(((Number) val).doubleValue());
+        return new BigDecimal(val.toString());
+    }
+}
+
