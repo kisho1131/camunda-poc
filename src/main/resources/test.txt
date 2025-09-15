@@ -1,128 +1,7 @@
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
-import java.util.*;
-import java.util.stream.Collectors;
-
-@Service
-public class PmfHierarchyService {
-
-    private final JdbcTemplate jdbcTemplate;
-
-    public PmfHierarchyService(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
-
-    public List<Map<String, Object>> buildHierarchy() {
-
-        String sql = """
-            SELECT pmf_acct_lvl_1_desc AS pmf_level_1,
-                   pmf_level_2,
-                   pmf_level_3,
-                   mtd_variance,
-                   current_book_value,
-                   prior_book_value,
-                   dod_variance
-            FROM your_table
-        """;
-
-        // Step 1: Fetch data as List<Map<String,Object>>
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
-
-        // Step 2: Build hierarchy with groupingBy and streams
-        Map<Object, List<Map<String, Object>>> groupedByL1 =
-                rows.stream().collect(Collectors.groupingBy(r -> r.get("pmf_level_1"),
-                        LinkedHashMap::new, Collectors.toList()));
-
-        List<Map<String, Object>> hierarchy = new ArrayList<>();
-
-        groupedByL1.forEach((lvl1Key, lvl1Rows) -> {
-            Map<String, Object> lvl1Node = new LinkedHashMap<>();
-            lvl1Node.put("description", lvl1Key);
-            lvl1Node.put("mtd", sum(lvl1Rows, "mtd_variance"));
-            lvl1Node.put("current", sum(lvl1Rows, "current_book_value"));
-            lvl1Node.put("prior", sum(lvl1Rows, "prior_book_value"));
-            lvl1Node.put("dod", sum(lvl1Rows, "dod_variance"));
-
-            // Level 2 grouping
-            Map<Object, List<Map<String, Object>>> groupedByL2 =
-                    lvl1Rows.stream().collect(Collectors.groupingBy(r -> r.get("pmf_level_2"),
-                            LinkedHashMap::new, Collectors.toList()));
-
-            Map<String, Object> lvl2Map = new LinkedHashMap<>();
-
-            groupedByL2.forEach((lvl2Key, lvl2Rows) -> {
-                Map<String, Object> lvl2Node = new LinkedHashMap<>();
-                lvl2Node.put("description", lvl2Key);
-                lvl2Node.put("mtd", sum(lvl2Rows, "mtd_variance"));
-                lvl2Node.put("current", sum(lvl2Rows, "current_book_value"));
-                lvl2Node.put("prior", sum(lvl2Rows, "prior_book_value"));
-                lvl2Node.put("dod", sum(lvl2Rows, "dod_variance"));
-
-                // Level 3 grouping
-                Map<Object, List<Map<String, Object>>> groupedByL3 =
-                        lvl2Rows.stream().collect(Collectors.groupingBy(r -> r.get("pmf_level_3"),
-                                LinkedHashMap::new, Collectors.toList()));
-
-                Map<String, Object> lvl3Map = new LinkedHashMap<>();
-
-                groupedByL3.forEach((lvl3Key, lvl3Rows) -> {
-                    Map<String, Object> lvl3Node = new LinkedHashMap<>();
-                    lvl3Node.put("description", lvl3Key);
-                    lvl3Node.put("mtd", sum(lvl3Rows, "mtd_variance"));
-                    lvl3Node.put("current", sum(lvl3Rows, "current_book_value"));
-                    lvl3Node.put("prior", sum(lvl3Rows, "prior_book_value"));
-                    lvl3Node.put("dod", sum(lvl3Rows, "dod_variance"));
-
-                    lvl3Map.put(String.valueOf(lvl3Key), lvl3Node);
-                });
-
-                lvl2Node.put("children", lvl3Map);
-                lvl2Map.put(String.valueOf(lvl2Key), lvl2Node);
-            });
-
-            lvl1Node.put("children", lvl2Map);
-            hierarchy.add(lvl1Node);
-        });
-
-        return hierarchy;
-    }
-
-    private Object sum(List<Map<String, Object>> rows, String key) {
-        return rows.stream()
-                .map(row -> row.get(key))
-                .filter(Objects::nonNull)
-                .reduce((a, b) -> {
-                    if (a instanceof Number && b instanceof Number) {
-                        if (a instanceof BigDecimal || b instanceof BigDecimal) {
-                            return toBigDecimal(a).add(toBigDecimal(b));
-                        }
-                        if (a instanceof Double || b instanceof Double) {
-                            return ((Number) a).doubleValue() + ((Number) b).doubleValue();
-                        }
-                        return ((Number) a).longValue() + ((Number) b).longValue();
-                    }
-                    return a;
-                }).orElse(BigDecimal.ZERO);
-    }
-
-    private BigDecimal toBigDecimal(Object obj) {
-        return (obj instanceof BigDecimal)
-                ? (BigDecimal) obj
-                : new BigDecimal(obj.toString());
-    }
-}
-
-
-------------
-
-
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>PMF Report</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -132,192 +11,89 @@ public class PmfHierarchyService {
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 16px;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 6px 10px;
+            text-align: right;
         }
         th {
             background-color: #f2f2f2;
-            padding: 8px;
-            border: 1px solid #ccc;
-            text-align: left;
         }
-        td {
-            padding: 6px 8px;
-            border: 1px solid #ccc;
-        }
-        .lvl1 {
+        .level-1 {
+            background-color: #e9f5ff;
             font-weight: bold;
-            background-color: #e6f7ff;
         }
-        .lvl2 {
-            background-color: #fafafa;
+        .level-2 {
+            background-color: #f9fcff;
             padding-left: 20px;
         }
-        .lvl3 {
-            background-color: #fff;
+        .level-3 {
+            background-color: #ffffff;
             padding-left: 40px;
-            font-style: italic;
         }
-        .amount {
-            text-align: right;
+        .description {
+            text-align: left;
         }
     </style>
 </head>
 <body>
 
-<h2>PMF Hierarchical Report</h2>
+<h2>PMF Hierarchy Report</h2>
 
 <table>
     <thead>
     <tr>
-        <th>Description</th>
-        <th>MTD Variance</th>
+        <th class="description">Group</th>
         <th>Current Value</th>
         <th>Prior Value</th>
+        <th>MTD Value</th>
         <th>DoD Variance</th>
+        <th>MTD Variance</th>
     </tr>
     </thead>
     <tbody>
-
-    <#-- Iterate Level 1 -->
     <#list pmfHierarchy as lvl1>
-        <tr class="lvl1">
-            <td>${lvl1.description}</td>
-            <td class="amount">${lvl1.mtd}</td>
-            <td class="amount">${lvl1.current}</td>
-            <td class="amount">${lvl1.prior}</td>
-            <td class="amount">${lvl1.dod}</td>
+        <tr class="level-1">
+            <td class="description">${lvl1.description}</td>
+            <td>${lvl1.currentBookValue?string["#,##0.##"]}</td>
+            <td>${lvl1.priorBookValue?string["#,##0.##"]}</td>
+            <td>${lvl1.mtdBookValue?string["#,##0.##"]}</td>
+            <td>${lvl1.dodVariance?string["#,##0.##"]}</td>
+            <td>${lvl1.mtdVariance?string["#,##0.##"]}</td>
         </tr>
 
-        <#-- Iterate Level 2 -->
-        <#list lvl1.children?values as lvl2>
-            <tr class="lvl2">
-                <td>${lvl2.description}</td>
-                <td class="amount">${lvl2.mtd}</td>
-                <td class="amount">${lvl2.current}</td>
-                <td class="amount">${lvl2.prior}</td>
-                <td class="amount">${lvl2.dod}</td>
-            </tr>
+        <#if lvl1.children?? && (lvl1.children?size > 0)>
+            <#list lvl1.children as lvl2>
+                <tr class="level-2">
+                    <td class="description">${lvl2.description}</td>
+                    <td>${lvl2.currentBookValue?string["#,##0.##"]}</td>
+                    <td>${lvl2.priorBookValue?string["#,##0.##"]}</td>
+                    <td>${lvl2.mtdBookValue?string["#,##0.##"]}</td>
+                    <td>${lvl2.dodVariance?string["#,##0.##"]}</td>
+                    <td>${lvl2.mtdVariance?string["#,##0.##"]}</td>
+                </tr>
 
-            <#-- Iterate Level 3 -->
-            <#if lvl2.children??>
-                <#list lvl2.children?values as lvl3>
-                    <tr class="lvl3">
-                        <td>${lvl3.description}</td>
-                        <td class="amount">${lvl3.mtd}</td>
-                        <td class="amount">${lvl3.current}</td>
-                        <td class="amount">${lvl3.prior}</td>
-                        <td class="amount">${lvl3.dod}</td>
-                    </tr>
-                </#list>
-            </#if>
+                <#if lvl2.children?? && (lvl2.children?size > 0)>
+                    <#list lvl2.children as lvl3>
+                        <tr class="level-3">
+                            <td class="description">${lvl3.description}</td>
+                            <td>${lvl3.currentBookValue?string["#,##0.##"]}</td>
+                            <td>${lvl3.priorBookValue?string["#,##0.##"]}</td>
+                            <td>${lvl3.mtdBookValue?string["#,##0.##"]}</td>
+                            <td>${lvl3.dodVariance?string["#,##0.##"]}</td>
+                            <td>${lvl3.mtdVariance?string["#,##0.##"]}</td>
+                        </tr>
+                    </#list>
+                </#if>
 
-        </#list>
+            </#list>
+        </#if>
+
     </#list>
-
     </tbody>
 </table>
 
 </body>
 </html>
-
-
-
-
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
-import java.util.*;
-import java.util.stream.Collectors;
-
-@Service
-public class PmfHierarchyService {
-
-    private final JdbcTemplate jdbcTemplate;
-
-    public PmfHierarchyService(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
-
-    public List<Map<String, Object>> buildHierarchy() {
-
-        String sql = """
-            SELECT pmf_acct_lvl_1_desc AS pmfAcctLvl1Desc,
-                   pmf_acct_lvl_2_desc AS pmfAcctLvl2Desc,
-                   pmf_level_3 AS pmfLevel3,
-                   current_book_value AS currentBookValue,
-                   prior_book_value AS priorBookValue,
-                   mtd_book_value AS mtdBookValue,
-                   dod_variance AS dodVariance,
-                   mtd_variance AS mtdVariance
-            FROM your_table
-        """;
-
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
-
-        // Group by Level 1
-        Map<Object, List<Map<String, Object>>> groupedByL1 =
-                rows.stream().collect(Collectors.groupingBy(r -> r.get("pmfAcctLvl1Desc"),
-                        LinkedHashMap::new, Collectors.toList()));
-
-        List<Map<String, Object>> hierarchy = new ArrayList<>();
-
-        groupedByL1.forEach((lvl1Key, lvl1Rows) -> {
-            Map<String, Object> lvl1Node = makeNode(lvl1Key, lvl1Rows);
-
-            // Group by Level 2
-            Map<Object, List<Map<String, Object>>> groupedByL2 =
-                    lvl1Rows.stream().collect(Collectors.groupingBy(r -> r.get("pmfAcctLvl2Desc"),
-                            LinkedHashMap::new, Collectors.toList()));
-
-            List<Map<String, Object>> lvl2Children = new ArrayList<>();
-            groupedByL2.forEach((lvl2Key, lvl2Rows) -> {
-                Map<String, Object> lvl2Node = makeNode(lvl2Key, lvl2Rows);
-
-                // Group by Level 3
-                Map<Object, List<Map<String, Object>>> groupedByL3 =
-                        lvl2Rows.stream().collect(Collectors.groupingBy(r -> r.get("pmfLevel3"),
-                                LinkedHashMap::new, Collectors.toList()));
-
-                List<Map<String, Object>> lvl3Children = new ArrayList<>();
-                groupedByL3.forEach((lvl3Key, lvl3Rows) -> {
-                    lvl3Children.add(makeNode(lvl3Key, lvl3Rows));
-                });
-
-                lvl2Node.put("children", lvl3Children);
-                lvl2Children.add(lvl2Node);
-            });
-
-            lvl1Node.put("children", lvl2Children);
-            hierarchy.add(lvl1Node);
-        });
-
-        return hierarchy;
-    }
-
-    private Map<String, Object> makeNode(Object key, List<Map<String, Object>> rows) {
-        Map<String, Object> node = new LinkedHashMap<>();
-        node.put("description", key);
-        node.put("currentBookValue", sum(rows, "currentBookValue"));
-        node.put("priorBookValue", sum(rows, "priorBookValue"));
-        node.put("mtdBookValue", sum(rows, "mtdBookValue"));
-        node.put("dodVariance", sum(rows, "dodVariance"));
-        node.put("mtdVariance", sum(rows, "mtdVariance"));
-        return node;
-    }
-
-    private BigDecimal sum(List<Map<String, Object>> rows, String key) {
-        return rows.stream()
-                .map(r -> r.get(key))
-                .filter(Objects::nonNull)
-                .map(this::toBigDecimal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    private BigDecimal toBigDecimal(Object val) {
-        if (val instanceof BigDecimal) return (BigDecimal) val;
-        if (val instanceof Number) return BigDecimal.valueOf(((Number) val).doubleValue());
-        return new BigDecimal(val.toString());
-    }
-}
-
