@@ -1,6 +1,13 @@
-@SuppressWarnings("unchecked")
-public List<Map<String, Object>> pivotReports(List<Map<String, Object>> reportsData) {
-    Map<String, Map<String, Object>> leMap = new LinkedHashMap<>();
+public Map<String, Object> pivotForSideBySide(List<Map<String, Object>> reportsData) {
+    // Collect all unique legal entity names
+    Set<String> leNames = reportsData.stream()
+        .map(r -> (String) r.get("leNm"))
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+
+    // Main pivoted structure
+    List<Map<String, Object>> groups = new ArrayList<>();
+
+    Map<String, Map<String, Object>> groupMap = new LinkedHashMap<>();
 
     for (Map<String, Object> row : reportsData) {
         String leNm = (String) row.get("leNm");
@@ -12,94 +19,80 @@ public List<Map<String, Object>> pivotReports(List<Map<String, Object>> reportsD
         BigDecimal mtdEco = (BigDecimal) row.get("paaPtdUSDAmtEOlympus");
         BigDecimal mtd = (BigDecimal) row.get("paaPtdUSDAmtOlympus");
 
-        Map<String, Object> leReport = leMap.computeIfAbsent(leNm, k -> {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("leNm", leNm);
-            m.put("groups", new ArrayList<Map<String, Object>>());
-            m.put("totals", new HashMap<String, BigDecimal>() {{
-                put("dailyTotalAmount", BigDecimal.ZERO);
-                put("economicDailyAmount", BigDecimal.ZERO);
-                put("economicMTDAmount", BigDecimal.ZERO);
-                put("mtdTotalAmount", BigDecimal.ZERO);
-            }});
-            return m;
+        Map<String, Object> groupEntry = groupMap.computeIfAbsent(group, g -> {
+            Map<String, Object> gMap = new LinkedHashMap<>();
+            gMap.put("groupName", g);
+            gMap.put("rows", new ArrayList<Map<String, Object>>());
+            return gMap;
         });
 
-        List<Map<String, Object>> groups = (List<Map<String, Object>>) leReport.get("groups");
-        Map<String, Object> groupMap = groups.stream()
-            .filter(g -> g.get("groupName").equals(group))
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) groupEntry.get("rows");
+
+        Map<String, Object> rowEntry = rows.stream()
+            .filter(r -> r.get("name").equals(level3))
             .findFirst()
             .orElseGet(() -> {
-                Map<String, Object> g = new LinkedHashMap<>();
-                g.put("groupName", group);
-                g.put("rows", new ArrayList<Map<String, Object>>());
-                groups.add(g);
-                return g;
+                Map<String, Object> rMap = new LinkedHashMap<>();
+                rMap.put("name", level3);
+                rMap.put("values", new LinkedHashMap<String, Map<String, Object>>());
+                rows.add(rMap);
+                return rMap;
             });
 
-        List<Map<String, Object>> rows = (List<Map<String, Object>>) groupMap.get("rows");
+        Map<String, Map<String, Object>> values = (Map<String, Map<String, Object>>) rowEntry.get("values");
 
-        Map<String, Object> rowMap = new LinkedHashMap<>();
-        rowMap.put("name", level3);
-        rowMap.put("dailyTotalAmount", dly);
-        rowMap.put("economicDailyAmount", dlyEco);
-        rowMap.put("economicMTDAmount", mtdEco);
-        rowMap.put("mtdTotalAmount", mtd);
-        rows.add(rowMap);
-
-        // Accumulate totals
-        Map<String, BigDecimal> totals = (Map<String, BigDecimal>) leReport.get("totals");
-        totals.put("dailyTotalAmount", totals.get("dailyTotalAmount").add(dly));
-        totals.put("economicDailyAmount", totals.get("economicDailyAmount").add(dlyEco));
-        totals.put("economicMTDAmount", totals.get("economicMTDAmount").add(mtdEco));
-        totals.put("mtdTotalAmount", totals.get("mtdTotalAmount").add(mtd));
+        Map<String, Object> valueMap = values.computeIfAbsent(leNm, k -> new LinkedHashMap<>());
+        valueMap.put("dailyTotal", dly);
+        valueMap.put("economicDaily", dlyEco);
+        valueMap.put("economicMTD", mtdEco);
+        valueMap.put("mtdTotal", mtd);
     }
 
-    return new ArrayList<>(leMap.values());
-}
+    groups.addAll(groupMap.values());
 
+    Map<String, Object> result = new LinkedHashMap<>();
+    result.put("legalEntities", new ArrayList<>(leNames));
+    result.put("groups", groups);
+
+    return result;
+}
 
 
 <table border="1" cellspacing="0" cellpadding="5" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px;">
     <thead style="background-color:#f0f0f0;">
         <tr>
-            <th style="text-align:left;">Group</th>
-            <th>Daily Total Amount</th>
-            <th>Economic Daily Amount</th>
-            <th>Economic MTD Amount</th>
-            <th>MTD Total Amount</th>
+            <th rowspan="2" style="text-align:left;">Group</th>
+            <#list legalEntities as le>
+                <th colspan="4" style="text-align:center;">${le}</th>
+            </#list>
+        </tr>
+        <tr>
+            <#list legalEntities as le>
+                <th>Daily Total</th>
+                <th>Economic Daily</th>
+                <th>Economic MTD</th>
+                <th>MTD Total</th>
+            </#list>
         </tr>
     </thead>
     <tbody>
-    <#list reports as report>
-        <tr style="background-color:#e6f2ff; font-weight: bold;">
-            <td colspan="5">${report.leNm}</td>
+    <#list groups as group>
+        <tr style="font-weight: bold; background-color:#f9f9f9;">
+            <td colspan="${legalEntities?size * 4 + 1}">${group.groupName}</td>
         </tr>
 
-        <#list report.groups as group>
-            <tr style="font-weight: bold; background-color:#f9f9f9;">
-                <td>${group.groupName}</td>
-                <td></td><td></td><td></td><td></td>
+        <#list group.rows as row>
+            <tr>
+                <td style="padding-left: 20px;">${row.name}</td>
+                <#list legalEntities as le>
+                    <#assign value = row.values[le]!>
+                    <td style="text-align:right; color:${(value.dailyTotal!'0')?c?starts_with('-')?then('red','black')}">${value.dailyTotal!'0'?string("#,##0.##;(#,##0.##)")}</td>
+                    <td style="text-align:right; color:${(value.economicDaily!'0')?c?starts_with('-')?then('red','black')}">${value.economicDaily!'0'?string("#,##0.##;(#,##0.##)")}</td>
+                    <td style="text-align:right; color:${(value.economicMTD!'0')?c?starts_with('-')?then('red','black')}">${value.economicMTD!'0'?string("#,##0.##;(#,##0.##)")}</td>
+                    <td style="text-align:right; color:${(value.mtdTotal!'0')?c?starts_with('-')?then('red','black')}">${value.mtdTotal!'0'?string("#,##0.##;(#,##0.##)")}</td>
+                </#list>
             </tr>
-
-            <#list group.rows as row>
-                <tr>
-                    <td style="padding-left: 20px;">${row.name}</td>
-                    <td style="text-align:right; color:${row.dailyTotalAmount?c?starts_with("-")?then("red","black")}">${row.dailyTotalAmount?string("#,##0.##;(#,##0.##)")}</td>
-                    <td style="text-align:right; color:${row.economicDailyAmount?c?starts_with("-")?then("red","black")}">${row.economicDailyAmount?string("#,##0.##;(#,##0.##)")}</td>
-                    <td style="text-align:right; color:${row.economicMTDAmount?c?starts_with("-")?then("red","black")}">${row.economicMTDAmount?string("#,##0.##;(#,##0.##)")}</td>
-                    <td style="text-align:right; color:${row.mtdTotalAmount?c?starts_with("-")?then("red","black")}">${row.mtdTotalAmount?string("#,##0.##;(#,##0.##)")}</td>
-                </tr>
-            </#list>
         </#list>
-
-        <tr style="font-weight: bold; background-color:#d9edf7;">
-            <td>Total</td>
-            <td style="text-align:right;">${report.totals.dailyTotalAmount?string("#,##0.##;(#,##0.##)")}</td>
-            <td style="text-align:right;">${report.totals.economicDailyAmount?string("#,##0.##;(#,##0.##)")}</td>
-            <td style="text-align:right;">${report.totals.economicMTDAmount?string("#,##0.##;(#,##0.##)")}</td>
-            <td style="text-align:right;">${report.totals.mtdTotalAmount?string("#,##0.##;(#,##0.##)")}</td>
-        </tr>
     </#list>
     </tbody>
 </table>
