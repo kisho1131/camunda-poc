@@ -28,18 +28,19 @@
             <tr>
                 <td style="padding-left: 20px;">${row.name}</td>
                 <#list legalEntities as le>
-                    <#assign value = row.values[le]!>
+                    <#assign value = row.values[le]!{}>
+
                     <td style="text-align:right;">
-                        ${(value.dailyTotal?number('0'))?string["#,##0.##;(#,##0.##)"]}
+                        ${(value.dailyTotal!?string("0"))?replace(",", "")?number?string("#,##0.##;(#,##0.##)")}
                     </td>
                     <td style="text-align:right;">
-                        ${(value.economicDaily?number('0'))?string["#,##0.##;(#,##0.##)"]}
+                        ${(value.economicDaily!?string("0"))?replace(",", "")?number?string("#,##0.##;(#,##0.##)")}
                     </td>
                     <td style="text-align:right;">
-                        ${(value.economicMTD?number('0'))?string["#,##0.##;(#,##0.##)"]}
+                        ${(value.economicMTD!?string("0"))?replace(",", "")?number?string("#,##0.##;(#,##0.##)")}
                     </td>
                     <td style="text-align:right;">
-                        ${(value.mtdTotal?number('0'))?string["#,##0.##;(#,##0.##)"]}
+                        ${(value.mtdTotal!?string("0"))?replace(",", "")?number?string("#,##0.##;(#,##0.##)")}
                     </td>
                 </#list>
             </tr>
