@@ -1,64 +1,5 @@
-public Map<String, Object> pivotForSideBySide(List<Map<String, Object>> reportsData) {
-    // Collect all unique legal entity names
-    Set<String> leNames = reportsData.stream()
-        .map(r -> (String) r.get("leNm"))
-        .collect(Collectors.toCollection(LinkedHashSet::new));
-
-    // Main pivoted structure
-    List<Map<String, Object>> groups = new ArrayList<>();
-
-    Map<String, Map<String, Object>> groupMap = new LinkedHashMap<>();
-
-    for (Map<String, Object> row : reportsData) {
-        String leNm = (String) row.get("leNm");
-        String group = (String) row.get("affirmationSubtotal2");
-        String level3 = (String) row.get("paaLevel3");
-
-        BigDecimal dly = (BigDecimal) row.get("paaDlyUSDAmtOlympus");
-        BigDecimal dlyEco = (BigDecimal) row.get("paaDlyUSDAmtEOlympus");
-        BigDecimal mtdEco = (BigDecimal) row.get("paaPtdUSDAmtEOlympus");
-        BigDecimal mtd = (BigDecimal) row.get("paaPtdUSDAmtOlympus");
-
-        Map<String, Object> groupEntry = groupMap.computeIfAbsent(group, g -> {
-            Map<String, Object> gMap = new LinkedHashMap<>();
-            gMap.put("groupName", g);
-            gMap.put("rows", new ArrayList<Map<String, Object>>());
-            return gMap;
-        });
-
-        List<Map<String, Object>> rows = (List<Map<String, Object>>) groupEntry.get("rows");
-
-        Map<String, Object> rowEntry = rows.stream()
-            .filter(r -> r.get("name").equals(level3))
-            .findFirst()
-            .orElseGet(() -> {
-                Map<String, Object> rMap = new LinkedHashMap<>();
-                rMap.put("name", level3);
-                rMap.put("values", new LinkedHashMap<String, Map<String, Object>>());
-                rows.add(rMap);
-                return rMap;
-            });
-
-        Map<String, Map<String, Object>> values = (Map<String, Map<String, Object>>) rowEntry.get("values");
-
-        Map<String, Object> valueMap = values.computeIfAbsent(leNm, k -> new LinkedHashMap<>());
-        valueMap.put("dailyTotal", dly);
-        valueMap.put("economicDaily", dlyEco);
-        valueMap.put("economicMTD", mtdEco);
-        valueMap.put("mtdTotal", mtd);
-    }
-
-    groups.addAll(groupMap.values());
-
-    Map<String, Object> result = new LinkedHashMap<>();
-    result.put("legalEntities", new ArrayList<>(leNames));
-    result.put("groups", groups);
-
-    return result;
-}
-
-
-<table border="1" cellspacing="0" cellpadding="5" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px;">
+<table border="1" cellspacing="0" cellpadding="5"
+       style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px;">
     <thead style="background-color:#f0f0f0;">
         <tr>
             <th rowspan="2" style="text-align:left;">Group</th>
@@ -77,19 +18,21 @@ public Map<String, Object> pivotForSideBySide(List<Map<String, Object>> reportsD
     </thead>
     <tbody>
     <#list groups as group>
+        <!-- Group Header Row -->
         <tr style="font-weight: bold; background-color:#f9f9f9;">
             <td colspan="${legalEntities?size * 4 + 1}">${group.groupName}</td>
         </tr>
 
+        <!-- Each Row Under the Group -->
         <#list group.rows as row>
             <tr>
                 <td style="padding-left: 20px;">${row.name}</td>
                 <#list legalEntities as le>
                     <#assign value = row.values[le]!>
-                    <td style="text-align:right; color:${(value.dailyTotal!'0')?c?starts_with('-')?then('red','black')}">${value.dailyTotal!'0'?string("#,##0.##;(#,##0.##)")}</td>
-                    <td style="text-align:right; color:${(value.economicDaily!'0')?c?starts_with('-')?then('red','black')}">${value.economicDaily!'0'?string("#,##0.##;(#,##0.##)")}</td>
-                    <td style="text-align:right; color:${(value.economicMTD!'0')?c?starts_with('-')?then('red','black')}">${value.economicMTD!'0'?string("#,##0.##;(#,##0.##)")}</td>
-                    <td style="text-align:right; color:${(value.mtdTotal!'0')?c?starts_with('-')?then('red','black')}">${value.mtdTotal!'0'?string("#,##0.##;(#,##0.##)")}</td>
+                    <td style="text-align:right;">${(value.dailyTotal!'0')?string("#,##0.##;(#,##0.##)")}</td>
+                    <td style="text-align:right;">${(value.economicDaily!'0')?string("#,##0.##;(#,##0.##)")}</td>
+                    <td style="text-align:right;">${(value.economicMTD!'0')?string("#,##0.##;(#,##0.##)")}</td>
+                    <td style="text-align:right;">${(value.mtdTotal!'0')?string("#,##0.##;(#,##0.##)")}</td>
                 </#list>
             </tr>
         </#list>
