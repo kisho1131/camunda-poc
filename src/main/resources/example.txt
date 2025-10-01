@@ -1,59 +1,36 @@
 <tbody>
-<#list data as lvl1>
+  <#list data as lvl1>
     <tr>
-        <td>
-            <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
-                <tr>
-                    <td style="width:0px;">&nbsp;</td> <!-- No indent for L1 -->
-                    <td>${lvl1.description}</td>
-                </tr>
-            </table>
-        </td>
-        <td>${lvl1.currentBookValue?string["#,##0.##"]}</td>
-        <td>${lvl1.priorBookValue?string["#,##0.##"]}</td>
-        <td>${lvl1.mtdBookValue?string["#,##0.##"]}</td>
-        <td>${lvl1.dodVariance?string["#,##0.##"]}</td>
-        <td>${lvl1.mtdVariance?string["#,##0.##"]}</td>
+      <td class="description">${lvl1.description}</td>
+      <td>${lvl1.priorBookValue?string["#,##0.##"]}</td>
+      <td>${lvl1.currentBookValue?string["#,##0.##"]}</td>
+      <td>${lvl1.mtdBookValue?string["#,##0.##"]}</td>
+      <td>${lvl1.dodVariance?string["#,##0.##"]}</td>
+      <td>${lvl1.mtdVariance?string["#,##0.##"]}</td>
     </tr>
-
     <#if lvl1.children?? && (lvl1.children?size > 0)>
-        <#list lvl1.children as lvl2>
+      <#list lvl1.children as lvl2>
+        <tr>
+          <td class="description">&nbsp;&nbsp;&nbsp;&nbsp;${lvl2.description}</td>
+          <td class="level2">${lvl2.currentBookValue?string["#,##0.##"]}</td>
+          <td class="level2">${lvl2.priorBookValue?string["#,##0.##"]}</td>
+          <td class="level2">${lvl2.mtdBookValue?string["#,##0.##"]}</td>
+          <td class="level2">${lvl2.dodVariance?string["#,##0.##"]}</td>
+          <td class="level2">${lvl2.mtdVariance?string["#,##0.##"]}</td>
+        </tr>
+        <#if lvl2.children?? && (lvl2.children?size > 0)>
+          <#list lvl2.children as lvl3>
             <tr>
-                <td>
-                    <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
-                        <tr>
-                            <td style="width:20px;">&nbsp;</td> <!-- indent for L2 -->
-                            <td>${lvl2.description}</td>
-                        </tr>
-                    </table>
-                </td>
-                <td>${lvl2.currentBookValue?string["#,##0.##"]}</td>
-                <td>${lvl2.priorBookValue?string["#,##0.##"]}</td>
-                <td>${lvl2.mtdBookValue?string["#,##0.##"]}</td>
-                <td>${lvl2.dodVariance?string["#,##0.##"]}</td>
-                <td>${lvl2.mtdVariance?string["#,##0.##"]}</td>
+              <td class="description level3">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${lvl3.description}</td>
+              <td class="level3">${lvl3.currentBookValue?string["#,##0.##"]}</td>
+              <td class="level3">${lvl3.priorBookValue?string["#,##0.##"]}</td>
+              <td class="level3">${lvl3.mtdBookValue?string["#,##0.##"]}</td>
+              <td class="level3">${lvl3.dodVariance?string["#,##0.##"]}</td>
+              <td class="level3">${lvl3.mtdVariance?string["#,##0.##"]}</td>
             </tr>
-
-            <#if lvl2.children?? && (lvl2.children?size > 0)>
-                <#list lvl2.children as lvl3>
-                    <tr>
-                        <td>
-                            <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
-                                <tr>
-                                    <td style="width:40px;">&nbsp;</td> <!-- deeper indent for L3 -->
-                                    <td>${lvl3.description}</td>
-                                </tr>
-                            </table>
-                        </td>
-                        <td>${lvl3.currentBookValue?string["#,##0.##"]}</td>
-                        <td>${lvl3.priorBookValue?string["#,##0.##"]}</td>
-                        <td>${lvl3.mtdBookValue?string["#,##0.##"]}</td>
-                        <td>${lvl3.dodVariance?string["#,##0.##"]}</td>
-                        <td>${lvl3.mtdVariance?string["#,##0.##"]}</td>
-                    </tr>
-                </#list>
-            </#if>
-        </#list>
+          </#list>
+        </#if>
+      </#list>
     </#if>
-</#list>
+  </#list>
 </tbody>
