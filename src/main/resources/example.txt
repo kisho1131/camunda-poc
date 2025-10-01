@@ -1,50 +1,59 @@
-<table border="1" cellspacing="0" cellpadding="5"
-       style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px;">
-    <thead style="background-color:#f0f0f0;">
-        <tr>
-            <th rowspan="2" style="text-align:left;">Group</th>
-            <#list legalEntities as le>
-                <th colspan="4" style="text-align:center;">${le}</th>
-            </#list>
-        </tr>
-        <tr>
-            <#list legalEntities as le>
-                <th>Daily Total</th>
-                <th>Economic Daily</th>
-                <th>Economic MTD</th>
-                <th>MTD Total</th>
-            </#list>
-        </tr>
-    </thead>
-    <tbody>
-    <#list groups as group>
-        <!-- Group Header Row -->
-        <tr style="font-weight: bold; background-color:#f9f9f9;">
-            <td colspan="${legalEntities?size * 4 + 1}">${group.groupName}</td>
-        </tr>
+<tbody>
+<#list data as lvl1>
+    <tr>
+        <td>
+            <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
+                <tr>
+                    <td style="width:0px;">&nbsp;</td> <!-- No indent for L1 -->
+                    <td>${lvl1.description}</td>
+                </tr>
+            </table>
+        </td>
+        <td>${lvl1.currentBookValue?string["#,##0.##"]}</td>
+        <td>${lvl1.priorBookValue?string["#,##0.##"]}</td>
+        <td>${lvl1.mtdBookValue?string["#,##0.##"]}</td>
+        <td>${lvl1.dodVariance?string["#,##0.##"]}</td>
+        <td>${lvl1.mtdVariance?string["#,##0.##"]}</td>
+    </tr>
 
-        <!-- Each Row Under the Group -->
-        <#list group.rows as row>
+    <#if lvl1.children?? && (lvl1.children?size > 0)>
+        <#list lvl1.children as lvl2>
             <tr>
-                <td style="padding-left: 20px;">${row.name}</td>
-                <#list legalEntities as le>
-                    <#assign value = row.values[le]!{}>
-
-                    <td style="text-align:right;">
-                        ${(value.dailyTotal!?string("0"))?replace(",", "")?number?string("#,##0.##;(#,##0.##)")}
-                    </td>
-                    <td style="text-align:right;">
-                        ${(value.economicDaily!?string("0"))?replace(",", "")?number?string("#,##0.##;(#,##0.##)")}
-                    </td>
-                    <td style="text-align:right;">
-                        ${(value.economicMTD!?string("0"))?replace(",", "")?number?string("#,##0.##;(#,##0.##)")}
-                    </td>
-                    <td style="text-align:right;">
-                        ${(value.mtdTotal!?string("0"))?replace(",", "")?number?string("#,##0.##;(#,##0.##)")}
-                    </td>
-                </#list>
+                <td>
+                    <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
+                        <tr>
+                            <td style="width:20px;">&nbsp;</td> <!-- indent for L2 -->
+                            <td>${lvl2.description}</td>
+                        </tr>
+                    </table>
+                </td>
+                <td>${lvl2.currentBookValue?string["#,##0.##"]}</td>
+                <td>${lvl2.priorBookValue?string["#,##0.##"]}</td>
+                <td>${lvl2.mtdBookValue?string["#,##0.##"]}</td>
+                <td>${lvl2.dodVariance?string["#,##0.##"]}</td>
+                <td>${lvl2.mtdVariance?string["#,##0.##"]}</td>
             </tr>
+
+            <#if lvl2.children?? && (lvl2.children?size > 0)>
+                <#list lvl2.children as lvl3>
+                    <tr>
+                        <td>
+                            <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
+                                <tr>
+                                    <td style="width:40px;">&nbsp;</td> <!-- deeper indent for L3 -->
+                                    <td>${lvl3.description}</td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td>${lvl3.currentBookValue?string["#,##0.##"]}</td>
+                        <td>${lvl3.priorBookValue?string["#,##0.##"]}</td>
+                        <td>${lvl3.mtdBookValue?string["#,##0.##"]}</td>
+                        <td>${lvl3.dodVariance?string["#,##0.##"]}</td>
+                        <td>${lvl3.mtdVariance?string["#,##0.##"]}</td>
+                    </tr>
+                </#list>
+            </#if>
         </#list>
-    </#list>
-    </tbody>
-</table>
+    </#if>
+</#list>
+</tbody>
