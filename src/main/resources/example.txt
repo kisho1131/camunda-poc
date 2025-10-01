@@ -1,32 +1,47 @@
+<#--
+  MACRO for formatting numbers.
+  - If the number is negative, it will be shown as (123.45) in red.
+  - If positive, it will be shown as 123.45 in the default color.
+-->
+<#macro formatNumber num>
+  <#if num?is_number && num < 0>
+    <span style="color: #E74C3C;">(${num?abs?string["#,##0.##"]})</span>
+  <#elseif num?is_number>
+    ${num?string["#,##0.##"]}
+  <#else>
+    ${num!""} <#-- Fallback for non-numeric or null values, prints nothing -->
+  </#if>
+</#macro>
+
 <tbody>
   <#list data as lvl1>
-    <tr>
+    <tr style="background-color: #f2f2f2; font-weight: bold;">
       <td class="description">${lvl1.description}</td>
-      <td>${lvl1.priorBookValue?string["#,##0.##"]}</td>
-      <td>${lvl1.currentBookValue?string["#,##0.##"]}</td>
-      <td>${lvl1.mtdBookValue?string["#,##0.##"]}</td>
-      <td>${lvl1.dodVariance?string["#,##0.##"]}</td>
-      <td>${lvl1.mtdVariance?string["#,##0.##"]}</td>
+      <td><@formatNumber num=lvl1.priorBookValue /></td>
+      <td><@formatNumber num=lvl1.currentBookValue /></td>
+      <td><@formatNumber num=lvl1.mtdBookValue /></td>
+      <td><@formatNumber num=lvl1.dodVariance /></td>
+      <td><@formatNumber num=lvl1.mtdVariance /></td>
     </tr>
     <#if lvl1.children?? && (lvl1.children?size > 0)>
       <#list lvl1.children as lvl2>
-        <tr>
+        <tr style="background-color: #fafafa;">
           <td class="description">&nbsp;&nbsp;&nbsp;&nbsp;${lvl2.description}</td>
-          <td class="level2">${lvl2.currentBookValue?string["#,##0.##"]}</td>
-          <td class="level2">${lvl2.priorBookValue?string["#,##0.##"]}</td>
-          <td class="level2">${lvl2.mtdBookValue?string["#,##0.##"]}</td>
-          <td class="level2">${lvl2.dodVariance?string["#,##0.##"]}</td>
-          <td class="level2">${lvl2.mtdVariance?string["#,##0.##"]}</td>
+          <td class="level2"><@formatNumber num=lvl2.priorBookValue /></td>
+          <td class="level2"><@formatNumber num=lvl2.currentBookValue /></td>
+          <td class="level2"><@formatNumber num=lvl2.mtdBookValue /></td>
+          <td class="level2"><@formatNumber num=lvl2.dodVariance /></td>
+          <td class="level2"><@formatNumber num=lvl2.mtdVariance /></td>
         </tr>
         <#if lvl2.children?? && (lvl2.children?size > 0)>
           <#list lvl2.children as lvl3>
-            <tr>
+            <tr style="background-color: #ffffff;">
               <td class="description level3">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${lvl3.description}</td>
-              <td class="level3">${lvl3.currentBookValue?string["#,##0.##"]}</td>
-              <td class="level3">${lvl3.priorBookValue?string["#,##0.##"]}</td>
-              <td class="level3">${lvl3.mtdBookValue?string["#,##0.##"]}</td>
-              <td class="level3">${lvl3.dodVariance?string["#,##0.##"]}</td>
-              <td class="level3">${lvl3.mtdVariance?string["#,##0.##"]}</td>
+              <td class="level3"><@formatNumber num=lvl3.priorBookValue /></td>
+              <td class="level3"><@formatNumber num=lvl3.currentBookValue /></td>
+              <td class="level3"><@formatNumber num=lvl3.mtdBookValue /></td>
+              <td class="level3"><@formatNumber num=lvl3.dodVariance /></td>
+              <td class="level3"><@formatNumber num=lvl3.mtdVariance /></td>
             </tr>
           </#list>
         </#if>
