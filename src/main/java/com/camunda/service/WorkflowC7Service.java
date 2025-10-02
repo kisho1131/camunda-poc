@@ -2,7 +2,6 @@ package com.camunda.service;
 
 
 import com.camunda.model.*;
-import com.citi.bs.model.*;
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.TaskService;
 import org.camunda.bpm.engine.runtime.ProcessInstance;

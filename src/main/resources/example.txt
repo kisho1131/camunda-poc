@@ -1,245 +1,31 @@
+  <#-- Check if L2 has L3 children -->
+    <#if lvl2.children?has_content>
+        <#list lvl2.children as lvl3>
+            <tr style="background-color: #ffffff;">
+                <td class="description">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${lvl3.description}</td>
+                <td style="text-align: right; padding: 6px;">@formatNumber num=lvl3.mtdBookValue/></td>
+                <td style="text-align: right; padding: 6px;">@formatNumber num=lvl3.currentBookValue/></td>
+                <td style="text-align: right; padding: 6px;">@formatNumber num=lvl3.priorBookValue/></td>
+                <td style="text-align: right; padding: 6px;">@formatNumber num=lvl3.dodVariance/></td>
+                <td style="text-align: right; padding: 6px;">@formatNumber num=lvl3.mtdVariance/></td>
+            </tr>
 
-public class BusinessCommentaryServiceImpl {
-
-    private final BusinessWorkFlowHelper businessWorkFlowHelper;
-    private final TLStaticInfoRepository tlStaticInfoRepository;
-    private final UserDetailsRepository userDetailsRepository; // Added for new method
-    private final MailService mailService;
-    private final BusinessCommentaryService businessCommentaryService;
-    private final ExecutorService executorService; // Dedicated Executor for I/O tasks
-
-    // Constructor (in a real Spring app, these would be injected)
-    public BusinessCommentaryServiceImpl(
-            BusinessWorkFlowHelper businessWorkFlowHelper,
-            TLStaticInfoRepository tlStaticInfoRepository,
-            UserDetailsRepository userDetailsRepository, // Injected dependency
-            MailService mailService,
-            BusinessCommentaryService businessCommentaryService) {
-        this.businessWorkFlowHelper = businessWorkFlowHelper;
-        this.tlStaticInfoRepository = tlStaticInfoRepository;
-        this.userDetailsRepository = userDetailsRepository;
-        this.mailService = mailService;
-        this.businessCommentaryService = businessCommentaryService;
-        // Use a fixed-size pool suitable for blocking I/O tasks
-        this.executorService = Executors.newFixedThreadPool(10);
-    }
-
-    /**
-     * Publishes a business commentary by making the database and service calls
-     * asynchronously and chaining them using CompletableFuture for efficiency.
-     * The method remains synchronous (void) but waits for the async tasks to complete.
-     * * @param publishRequestModel The model containing data for publishing.
-     */
-    public void publishCommentary(PublishRequestModel publishRequestModel) {
-        // 1. Synchronous, fast initial steps (kept on the caller thread)
-        businessWorkFlowHelper.validateIfAnyBusinessApproved(publishRequestModel);
-        String loggedInUserId = CommonUtils.fetchKeyFromGraphqlContext();
-
-        // Define the static keys needed for the DB fetch
-        List<String> keys = List.of(
-            WorkflowConstants.DAILY_BS_ADMIN_PUBLISH_FROM_ID,
-            WorkflowConstants.DAILY_BS_ADMIN_PUBLISH_DL
-        );
-
-        // 2. Start the blocking DB call asynchronously using the dedicated Executor
-        CompletableFuture<List<TLStaticInfoEntity>> dlInfoFuture = CompletableFuture.supplyAsync(() -> {
-            log.info("Starting async DB call for static info...");
-            return tlStaticInfoRepository.findAllByStaticKeyIn(keys);
-        }, executorService);
-
-
-        // 3. Chain the result processing and update the request model (runs on the async thread)
-        CompletableFuture<PublishRequestModel> modelUpdateFuture = dlInfoFuture
-            .thenApply(dlInfo -> {
-                log.info("Processing DB results and setting model values...");
-
-                // Initial validation check on the fetched data
-                if (dlInfo.isEmpty()) {
-                    throw new PublishMailException("Sender email ID configuration is missing.");
-                }
-
-                // Extract mailFrom and Cclist
-                List<String> mailFromAndCclist = dlInfo.stream()
-                    .filter(d1 -> d1.getCurrInd() == 1)
-                    .filter(d1 -> Objects.equals(d1.getStaticKey(), WorkflowConstants.DAILY_BS_ADMIN_PUBLISH_FROM_ID))
-                    .map(TLStaticInfoEntity::getStaticValue).toList();
-
-                if (!mailFromAndCclist.isEmpty()) {
-                    publishRequestModel.setMailFrom(mailFromAndCclist.getFirst());
-                    publishRequestModel.setMailCc(mailFromAndCclist);
-                } else {
-                     throw new PublishMailException("No valid Sender email ID found.");
-                }
-
-                // Extract mailToEmails
-                List<String> mailToEmails = dlInfo.stream()
-                    .filter(d1 -> d1.getCurrInd() == 1)
-                    .filter(d1 -> Objects.equals(d1.getStaticKey(), WorkflowConstants.DAILY_BS_ADMIN_PUBLISH_DL))
-                    // Assuming getMailToDlNames() returns a list of static descriptions to match against
-                    .filter(d1 -> publishRequestModel.getMailToDlNames().contains(d1.getStaticDesc()))
-                    .map(TLStaticInfoEntity::getStaticValue).toList();
-
-                publishRequestModel.setMailToEmails(mailToEmails);
-
-                return publishRequestModel;
-            })
-            // Handle exceptions specifically in the processing chain
-            .exceptionally(ex -> {
-                log.error("Error during DB fetch or data processing: {}", ex.getMessage());
-                // Re-throw if it's a critical application exception
-                throw new PublishMailException(ex.getMessage());
-            });
-
-        // 4. Chain the dependent external service call (MailService)
-        CompletableFuture<Boolean> mailStatusFuture = modelUpdateFuture.thenApplyAsync(updatedModel -> {
-            log.info("Starting async mail notification...");
-            return mailService.sendMailNotification(updatedModel, loggedInUserId, true);
-        }, executorService);
-
-
-        // 5. Chain the final database update (Approval) based on mail success
-        CompletableFuture<Void> finalApprovalFuture = mailStatusFuture.thenAcceptAsync(notificationSuccess -> {
-            log.info("Mail status received: {}. Proceeding with approval/logging...", notificationSuccess);
-            if (notificationSuccess) {
-                // Final DB write operation (approval)
-                businessCommentaryService.approveAllBusinessCommentariesByTmid(publishRequestModel.getTmid(), loggedInUserId);
-                log.info("Business commentary published successfully for tmid: {} by user: {}", publishRequestModel.getTmid(), loggedInUserId);
-            } else {
-                // If mail failed, complete the future exceptionally
-                throw new PublishMailException("Failed to send email notification.");
-            }
-        }, executorService);
-
-        // 6. Block and wait for the entire chain to complete (since the original method was void)
-        try {
-            finalApprovalFuture.join();
-        } catch (Exception e) {
-            // Unwrap and rethrow the application exception
-            Throwable actualException = (e.getCause() != null) ? e.getCause() : e;
-            if (actualException instanceof PublishMailException) {
-                throw (PublishMailException) actualException;
-            }
-            // Re-throw any other unexpected exceptions
-            throw new RuntimeException("An unexpected error occurred during publishing.", actualException);
-        }
-    }
-
-
-    /**
-     * Requests a business commentary, performing three parallel data fetches
-     * using CompletableFuture to minimize latency.
-     * @param publishRequestModel The model containing data for the request.
-     */
-    public void requestCommentary(PublishRequestModel publishRequestModel) {
-        log.info("Requesting business commentary for tmid: {} and mshLevel4Ids: {} by user: {}",
-                 publishRequestModel.getTmid(),
-                 publishRequestModel.getMshLevel4Ids(),
-                 WorkflowConstants.SM_UNIVERSAL_ID);
-
-        String loggedInUserId = CommonUtils.fetchKeyFromGraphqlContext();
-
-        // 1. Define independent, parallel I/O tasks
-
-        // Task A: Fetch DL Info (for Mail CC/From)
-        CompletableFuture<List<TLStaticInfoEntity>> dlInfoFuture = CompletableFuture.supplyAsync(() -> {
-            log.info("Starting parallel task: Fetching DL Info...");
-            List<String> keys = List.of(WorkflowConstants.DAILY_BS_ADMIN_PUBLISH_FROM_ID);
-            return tlStaticInfoRepository.findAllByStaticKeyIn(keys);
-        }, executorService);
-
-        // Task B: Fetch MailTo User Details by MSH Levels
-        CompletableFuture<List<UserDao>> mailToUsersFuture = CompletableFuture.supplyAsync(() -> {
-            log.info("Starting parallel task: Fetching MailTo User Details...");
-            return userDetailsRepository.getUserDetailsByMshLevels(4, publishRequestModel.getMshLevel4Ids());
-        }, executorService);
-
-        // Task C: Fetch Sender User Details by SOE ID (for Mail From Email)
-        CompletableFuture<String> senderEmailFuture = CompletableFuture.supplyAsync(() -> {
-            log.info("Starting parallel task: Fetching Sender Email...");
-            Set<String> soeIdSet = Set.of(loggedInUserId);
-            return userDetailsRepository.getUserDetailsBySoeId(soeIdSet).stream()
-                    .findFirst()
-                    .orElseThrow(() -> new DataRetrievalException("Failed to retrieve user details for SOE ID: " + loggedInUserId))
-                    .getEmailId();
-        }, executorService);
-
-        // 2. Combine the parallel tasks and process results once all are complete
-        CompletableFuture<Void> allFutures = CompletableFuture.allOf(
-            dlInfoFuture,
-            mailToUsersFuture,
-            senderEmailFuture
-        );
-
-        // 3. Chain the subsequent data processing and final I/O call
-        CompletableFuture<Void> finalMailFuture = allFutures
-            .thenRun(() -> {
-                log.info("All parallel data fetches complete. Starting model update and validation...");
-
-                // Get results from completed futures
-                List<TLStaticInfoEntity> dlInfo = dlInfoFuture.join();
-                List<UserDao> userDetails = mailToUsersFuture.join();
-                String senderEmailId = senderEmailFuture.join();
-
-                // Process TLStaticInfoEntity (Mail CC/From)
-                List<String> dlFromAndCclist = dlInfo.stream()
-                    .filter(d1 -> d1.getCurrInd() == 1)
-                    .filter(d1 -> Objects.equals(d1.getStaticKey(), WorkflowConstants.DAILY_BS_ADMIN_PUBLISH_FROM_ID))
-                    .map(TLStaticInfoEntity::getStaticValue)
-                    .toList();
-
-                // Process MailTo User Details (MailTo Emails)
-                List<String> dlToEmails = userDetails.stream()
-                    .map(UserDao::getEmailId)
-                    .toList();
-
-                // Validation
-                if (dlToEmails.isEmpty()) {
-                    throw new PublishMailException("No recipients found for the selected MSH Level 4 codes.");
-                }
-
-                // Update Request Model
-                publishRequestModel.setMailCc(dlFromAndCclist);
-                publishRequestModel.setMailFrom(senderEmailId); // Use sender email from Task C
-                publishRequestModel.setMailToEmails(dlToEmails);
-
-                publishRequestModel.setMailSubject("Request for Business Commentary - " + CommonUtils.getFormattedDate(publishRequestModel.getTmid()));
-            })
-            // 4. Execute the final blocking mail service call
-            .thenAcceptAsync(v -> {
-                log.info("Request model populated. Sending mail notification...");
-                boolean notificationSuccess = mailService.sendMailNotification(publishRequestModel, loggedInUserId, false);
-
-                if (!notificationSuccess) {
-                    throw new PublishMailException("Failed to send email notification for request.");
-                }
-                log.info("Business commentary request email successfully sent for tmid: {}", publishRequestModel.getTmid());
-            }, executorService)
-            // Handle exceptions specifically in the processing chain
-            .exceptionally(ex -> {
-                Throwable actualException = (ex.getCause() != null) ? ex.getCause() : ex;
-                log.error("Error during commentary request: {}", actualException.getMessage());
-                // Re-throw if it's a critical application exception
-                if (actualException instanceof PublishMailException) {
-                    throw (PublishMailException) actualException;
-                }
-                if (actualException instanceof DataRetrievalException) {
-                    throw new PublishMailException(actualException.getMessage());
-                }
-                throw new RuntimeException("An unexpected error occurred during request.", actualException);
-            });
-
-
-        // 5. Block and wait for the entire chain to complete (since the original method was void)
-        try {
-            finalMailFuture.join();
-        } catch (Exception e) {
-            // Unwrap and rethrow the application exception
-            Throwable actualException = (e.getCause() != null) ? e.getCause() : e;
-            if (actualException instanceof PublishMailException) {
-                throw (PublishMailException) actualException;
-            }
-            // Re-throw any other unexpected exceptions
-            throw new RuntimeException("An unexpected error occurred during commentary request.", actualException);
-        }
-    }
-}
+            <#-- L3 children are the original L5 records (leaf nodes). You can optionally display these: -->
+            <#if lvl3.children?has_content>
+                <#-- If you want to show the L5 details uncomment the block below -->
+                <#--
+                <#list lvl3.children as lvl5>
+                    <tr style="background-color: #f7f7f7;">
+                        <td class="description">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${lvl5.pmfAcctLvl5Desc}</td>
+                        <td style="text-align: right; padding: 6px;">@formatNumber num=lvl5.mtdBookValue/></td>
+                        <td style="text-align: right; padding: 6px;">@formatNumber num=lvl5.currentBookValue/></td>
+                        <td style="text-align: right; padding: 6px;">@formatNumber num=lvl5.priorBookValue/></td>
+                        <td style="text-align: right; padding: 6px;">@formatNumber num=lvl5.dodVariance/></td>
+                        <td style="text-align: right; padding: 6px;">@formatNumber num=lvl5.mtdVariance/></td>
+                    </tr>
+                </#list>
+                -->
+            </#if>
+        </#list>
+    </#if>
+</#list>
