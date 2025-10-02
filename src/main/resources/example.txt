@@ -1,4 +1,38 @@
-  <#-- Check if L2 has L3 children -->
+<thead>
+<tr>
+<th>Group</th>
+<th>Book value - Previous Month-end (mtdBookValue)</th>
+<th>Book value - Actual (currentBookValue)</th>
+<th>Book value - Prior (priorBookValue)</th>
+<th>DoD Variance (dodVariance)</th>
+<th>MoM Variance (mtdVariance)</th>
+</tr>
+</thead>
+<tbody>
+<#-- Iterate over L1 nodes (The root list returned by the Java function) -->
+<#list hierarchyData as lvl1> <#-- Assuming the data model passes the resulting list as 'hierarchyData' -->
+<tr style="background-color: #F2F2F2; font-weight: bold;">
+<td class="description">${lvl1.description}</td>
+<td style="text-align: right; padding: 6px;">@formatNumber num=lvl1.mtdBookValue/></td>
+<td style="text-align: right; padding: 6px;">@formatNumber num=lvl1.currentBookValue/></td>
+<td style="text-align: right; padding: 6px;">@formatNumber num=lvl1.priorBookValue/></td>
+<td style="text-align: right; padding: 6px;">@formatNumber num=lvl1.dodVariance/></td>
+<td style="text-align: right; padding: 6px;">@formatNumber num=lvl1.mtdVariance/></td>
+</tr>
+
+<#-- Check if L1 has L2 children -->
+<#if lvl1.children?has_content>
+<#list lvl1.children as lvl2>
+<tr style="background-color: #fafafa;">
+<td class="description">    ${lvl2.description}</td>
+<td style="text-align: right; padding: 6px;">@formatNumber num=lvl2.mtdBookValue/></td>
+<td style="text-align: right; padding: 6px;">@formatNumber num=lvl2.currentBookValue/></td>
+<td style="text-align: right; padding: 6px;">@formatNumber num=lvl2.priorBookValue/></td>
+<td style="text-align: right; padding: 6px;">@formatNumber num=lvl2.dodVariance/></td>
+<td style="text-align: right; padding: 6px;">@formatNumber num=lvl2.mtdVariance/></td>
+</tr>
+
+    <#-- Check if L2 has L3 children -->
     <#if lvl2.children?has_content>
         <#list lvl2.children as lvl3>
             <tr style="background-color: #ffffff;">
@@ -29,3 +63,9 @@
         </#list>
     </#if>
 </#list>
+
+</#if>
+
+</#list>
+
+</tbody>
